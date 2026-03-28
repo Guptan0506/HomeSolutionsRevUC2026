@@ -7,18 +7,24 @@ function ProviderCard({ name, type, price, experience, initials, onSelect }) {
         <div className="avt avt-blue">{initials}</div>
         <div style={{ flex: 1 }}>
           <div className="card-name">{name}</div>
-          <div className="card-sub" style={{ fontSize: '11px', color: '#666' }}>
-            {type} • {experience} yrs exp.
+          <div className="card-sub">
+            {type} specialist
           </div>
         </div>
         <div className="card-price">${price}/hr</div>
       </div>
+
+      <div className="card-meta">
+        <span className="pill">{experience} years experience</span>
+        <span className="pill">Verified Profile</span>
+      </div>
+
       <button 
         className="btn-p" 
-        style={{ width: '100%', marginTop: '12px' }}
+        style={{ width: '100%', marginTop: '14px' }}
         onClick={onSelect}
       >
-        Select Professional
+        Book This Professional
       </button>
     </div>
   );
