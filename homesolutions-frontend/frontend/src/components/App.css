@@ -1,0 +1,183 @@
+/* Global Reset & Variables */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --hs-blue: #1E88E5;
+  --hs-blue-light: #E3F2FD;
+  --hs-blue-dark: #0D47A1;
+  --hs-orange: #F57C00;
+  --hs-orange-light: #FFF3E0;
+  --hs-card: #F9F9F9;
+  --hs-border: #DDDDDD;
+  --hs-green: #2E7D32;
+  --hs-green-light: #E8F5E9;
+  --hs-red: #C62828;
+  --hs-red-light: #FFEBEE;
+  --hs-yellow-light: #FFFDE7;
+  
+  /* System Colors - adjustment for React background */
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f1f5f9;
+  --color-border-secondary: #dddddd;
+  --color-border-tertiary: #eeeeee;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #666666;
+  --color-text-tertiary: #999999;
+}
+
+/* Layout Containers */
+.shell {
+  background: var(--color-background-secondary);
+  border-radius: 16px;
+  padding: 12px;
+  font-family: sans-serif;
+  max-width: 450px;
+  margin: 20px auto;
+}
+
+.phone {
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 24px;
+  overflow: hidden;
+  min-height: 680px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Navigation Tabs */
+.tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.tab {
+  font-size: 11px;
+  padding: 4px 11px;
+  border-radius: 20px;
+  border: 0.5px solid var(--color-border-secondary);
+  cursor: pointer;
+  background: var(--color-background-primary);
+  color: var(--color-text-secondary);
+  transition: all .15s;
+  white-space: nowrap;
+}
+
+.tab.on {
+  background: var(--hs-blue);
+  color: #fff;
+  border-color: var(--hs-blue);
+}
+
+/* Header / Topbar */
+.topbar {
+  background: var(--hs-blue);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.topbar-brand {
+  font-size: 15px;
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: .01em;
+}
+
+/* Content Area */
+.body {
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.hero-band {
+  background: var(--hs-blue-light);
+  padding: 28px 20px 24px;
+  text-align: center;
+}
+
+.hero-band h1 {
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--hs-blue-dark);
+  line-height: 1.3;
+  margin-bottom: 6px;
+}
+
+/* Provider Cards */
+.card {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--hs-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avt {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.avt-blue { background: var(--hs-blue-light); color: var(--hs-blue-dark); }
+
+.card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.card-price {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--hs-orange);
+  margin-left: auto;
+}
+
+/* Buttons */
+.btn-p {
+  background: var(--hs-orange);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.section-wrap {
+  padding: 16px 18px;
+}
+
+.sec-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
