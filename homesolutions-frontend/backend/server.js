@@ -17,15 +17,33 @@ const MAX_CHAT_MESSAGE_LENGTH = 1000;
 const troubleshootRateLimitStore = new Map();
 let geminiModel = null;
 
-const TROUBLESHOOT_SYSTEM_PROMPT = `You are FixMate's home troubleshooting assistant.
-Give beginner-friendly and safety-first guidance for home issues.
-Rules:
-- Keep responses concise and practical (3 to 7 numbered steps where possible).
-- Suggest only basic checks users can do safely.
-- For electrical, gas, major plumbing, structural, mold, fire, or injury risks: tell the user to stop and contact a licensed professional.
-- Never provide dangerous or high-risk DIY instructions.
-- If information is missing, ask one short clarifying question before giving risky advice.
-- End with one safety reminder sentence.`;
+const TROUBLESHOOT_SYSTEM_PROMPT = `You are FixMate's home troubleshooting assistant. You are kind, patient, and helpful.
+
+CRITICAL: You must ALWAYS respond with ONLY a valid JSON object, no other text. Nothing before or after the JSON.
+
+Response structure (must be valid JSON):
+{
+  "troubleshootingSteps": "1. Step one here\\n2. Step two here\\n3. Step three here",
+  "complexity": "simple",
+  "recommendedServiceType": null,
+  "safetyReminder": "Safety message here"
+}
+
+For complex problems requiring professional help, set "complexity": "complex" and include the appropriate service type:
+- "Electric" for electrical problems
+- "Plumbing" for water/pipes  
+- "HVAC" for heating/cooling
+- "Appliance" for major appliances
+- "Carpentry" for wood/structural
+
+RULES:
+1. Always return valid JSON, nothing else
+2. Simple issues: complexity="simple", recommendedServiceType=null
+3. Complex/dangerous issues: complexity="complex", include service type
+4. Be kind and reassuring
+5. Provide 3-7 numbered steps when possible
+6. Always include a safety reminder
+7. For dangerous issues, recommend professional help strongly`;
 
 // Middleware
 app.use(cors());
@@ -1056,13 +1074,49 @@ app.post('/api/chat/troubleshoot', async (req, res) => {
       }),
     ]);
 
-    const assistantReply = geminiResult?.response?.text?.().trim();
+    const rawResponse = geminiResult?.response?.text?.().trim();
 
-    if (!assistantReply) {
+    if (!rawResponse) {
       return res.status(502).json({ message: 'Assistant could not generate a response. Please try again.' });
     }
 
-    return res.json({ assistantReply });
+    // Parse the JSON response from Gemini
+    let parsedResponse;
+    try {
+      parsedResponse = JSON.parse(rawResponse);
+    } catch (parseErr) {
+      // Try to extract JSON if Gemini added extra text
+      const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsedResponse = JSON.parse(jsonMatch[0]);
+          console.log('Extracted JSON from Gemini response');
+        } catch (innerErr) {
+          console.error('Failed to parse extracted JSON:', jsonMatch[0]);
+          parsedResponse = {
+            troubleshootingSteps: rawResponse,
+            complexity: 'complex',
+            recommendedServiceType: 'General',
+            safetyReminder: 'This issue may require professional help. Please submit a service request.'
+          };
+        }
+      } else {
+        console.error('Failed to parse Gemini JSON response:', rawResponse);
+        parsedResponse = {
+          troubleshootingSteps: rawResponse,
+          complexity: 'complex',
+          recommendedServiceType: 'General',
+          safetyReminder: 'This issue may require professional help. Please submit a service request.'
+        };
+      }
+    }
+
+    return res.json({
+      assistantReply: parsedResponse.troubleshootingSteps,
+      complexity: parsedResponse.complexity,
+      recommendedServiceType: parsedResponse.recommendedServiceType,
+      safetyReminder: parsedResponse.safetyReminder
+    });
   } catch (err) {
     console.error('Chat troubleshoot error:', err.message || err);
 

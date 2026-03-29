@@ -47,5 +47,10 @@ export async function sendTroubleshootMessage(userMessage, conversationHistory =
     throw new Error(getApiErrorMessage(response, data, 'Unable to get troubleshooting help right now.'));
   }
 
-  return data.assistantReply;
+  return {
+    assistantReply: data.assistantReply,
+    complexity: data.complexity,
+    recommendedServiceType: data.recommendedServiceType,
+    safetyReminder: data.safetyReminder
+  };
 }

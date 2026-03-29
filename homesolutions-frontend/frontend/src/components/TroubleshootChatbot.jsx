@@ -7,7 +7,7 @@ const starterPrompts = [
   'My AC is not cooling properly.',
 ];
 
-function TroubleshootChatbot() {
+function TroubleshootChatbot({ onNavigateToRequest }) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -56,19 +56,21 @@ function TroubleshootChatbot() {
     setIsLoading(true);
 
     try {
-      const assistantReply = await sendTroubleshootMessage(
+      const response = await sendTroubleshootMessage(
         trimmed,
         historyPayload
       );
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: assistantReply,
-        },
-      ]);
+      const assistantMessage = {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        content: response.assistantReply,
+        complexity: response.complexity,
+        recommendedServiceType: response.recommendedServiceType,
+        safetyReminder: response.safetyReminder,
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
       setError(err.message || 'Unable to get help at the moment.');
     } finally {
@@ -79,6 +81,14 @@ function TroubleshootChatbot() {
   const handleSubmit = (event) => {
     event.preventDefault();
     handleSend(inputValue);
+  };
+
+  const handleSubmitRequest = (serviceType) => {
+    if (onNavigateToRequest) {
+      onNavigateToRequest(serviceType);
+    } else {
+      console.warn('Navigation callback not provided');
+    }
   };
 
   return (
@@ -118,12 +128,27 @@ function TroubleshootChatbot() {
 
           <div className="chatbot-thread" role="log" aria-label="Conversation">
             {messages.map((message) => (
-              <article
-                key={message.id}
-                className={`chatbot-message ${message.role === 'assistant' ? 'assistant' : 'user'}`}
-              >
-                <p>{message.content}</p>
-              </article>
+              <div key={message.id}>
+                <article
+                  className={`chatbot-message ${message.role === 'assistant' ? 'assistant' : 'user'}`}
+                >
+                  <p>{message.content}</p>
+                </article>
+                {message.role === 'assistant' && message.recommendedServiceType && (
+                  <div className="chatbot-request-section">
+                    <p className="chatbot-request-text">
+                      This issue needs professional attention. Would you like to submit a service request?
+                    </p>
+                    <button
+                      type="button"
+                      className="btn-p chatbot-request-btn"
+                      onClick={() => handleSubmitRequest(message.recommendedServiceType)}
+                    >
+                      Submit Request for {message.recommendedServiceType} Service
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
             {isLoading && (
               <article className="chatbot-message assistant">

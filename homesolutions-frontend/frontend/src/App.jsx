@@ -14,35 +14,35 @@ import { buildApiUrl, getApiErrorMessage, readJsonSafely } from "./api";
 
 const featuredProfessionals = [
   {
-    name: 'Riya Mehta',
+    name: 'Sarah Johnson',
     profession: 'Plumbing Specialist',
     location: 'Downtown',
     experience: '7 years',
     review: 'Arrived on time and fixed a complex leak in one visit. Very professional!'
   },
   {
-    name: 'Arjun Nair',
+    name: 'James Wilson',
     profession: 'Licensed Electrician',
     location: 'Westside',
     experience: '9 years',
     review: 'Explained everything clearly and completed the rewiring neatly and quickly.'
   },
   {
-    name: 'Sana Khan',
+    name: 'Jessica Martinez',
     profession: 'Home Cleaning Expert',
     location: 'North Park',
     experience: '5 years',
     review: 'The place looked spotless. Friendly service and excellent attention to detail.'
   },
   {
-    name: 'Dev Patel',
+    name: 'David Thompson',
     profession: 'Appliance Technician',
     location: 'Riverside',
     experience: '8 years',
     review: 'Diagnosed my washer issue fast and had it running perfectly the same day.'
   },
   {
-    name: 'Neha Iyer',
+    name: 'Emily Anderson',
     profession: 'Carpentry Professional',
     location: 'East Ridge',
     experience: '6 years',
@@ -244,6 +244,16 @@ function App() {
   const handleBookNow = (provider) => {
     setSelectedProvider(provider);
     setCurrentScreen('form');
+  };
+
+  const handleChatbotSubmitRequest = (serviceType) => {
+    setSelectedService(serviceType || 'General Home Service');
+    
+    if (!currentUser) {
+      openAuth('login', 'form');
+    } else {
+      setCurrentScreen('form');
+    }
   };
 
   const openAuth = (mode, nextScreen = 'home') => {
@@ -461,40 +471,41 @@ function App() {
   };
 
   return (
-    <div className="shell">
-      <div className="phone">
-        <div className="topbar">
-          <div className="topbar-left">
-            <button className="brand-wrap" onClick={() => setCurrentScreen('home')}>
-              <img src={logoImage} alt="HomeSolutions" className="brand-logo" />
-              <span>
-                <span className="topbar-kicker">HOME MAINTENANCE</span>
-                <span className="topbar-brand">FixMate</span>
-              </span>
-            </button>
+    <>
+      <div className="shell">
+        <div className="phone">
+          <div className="topbar">
+            <div className="topbar-left">
+              <button className="brand-wrap" onClick={() => setCurrentScreen('home')}>
+                <img src={logoImage} alt="HomeSolutions" className="brand-logo" />
+                <span>
+                  <span className="topbar-kicker">HOME MAINTENANCE</span>
+                  <span className="topbar-brand">FixMate</span>
+                </span>
+              </button>
+            </div>
+
+            <div className="topbar-nav" role="navigation" aria-label="Main navigation">
+              <button className="btn-s nav-btn" onClick={goToRequestForm}>Service</button>
+              <button className="btn-p nav-btn" onClick={handleEarnClick}>Earn</button>
+            </div>
+
+            <div className="topbar-user-area">
+              {!currentUser ? (
+                <>
+                  <button className="btn-s nav-auth-btn" onClick={() => openAuth('login', 'home')}>Log In</button>
+                  <button className="btn-p nav-auth-btn" onClick={() => openAuth('signup', 'home')}>Sign Up</button>
+                </>
+              ) : (
+                <>
+                  <button className="btn-s nav-auth-btn" onClick={() => setCurrentScreen('profile')}>Profile</button>
+                  <button className="btn-s btn-logout nav-auth-btn" onClick={handleLogout}>Log Out</button>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="topbar-nav" role="navigation" aria-label="Main navigation">
-            <button className="btn-s nav-btn" onClick={goToRequestForm}>Service</button>
-            <button className="btn-p nav-btn" onClick={handleEarnClick}>Earn</button>
-          </div>
-
-          <div className="topbar-user-area">
-            {!currentUser ? (
-              <>
-                <button className="btn-s nav-auth-btn" onClick={() => openAuth('login', 'home')}>Log In</button>
-                <button className="btn-p nav-auth-btn" onClick={() => openAuth('signup', 'home')}>Sign Up</button>
-              </>
-            ) : (
-              <>
-                <button className="btn-s nav-auth-btn" onClick={() => setCurrentScreen('profile')}>Profile</button>
-                <button className="btn-s btn-logout nav-auth-btn" onClick={handleLogout}>Log Out</button>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="body">
+          <div className="body">
           {currentScreen === 'home' && (
             <>
               <div className="hero-band">
@@ -732,20 +743,21 @@ function App() {
             </>
           )}
 
-          {currentScreen === 'invoice' && (
-            <>
-              <ServiceInvoicePage
-                invoiceRequest={invoiceRequest}
-                onBackToProfile={() => setCurrentScreen('profile')}
-              />
-              {renderSharedFooter()}
-            </>
-          )}
+            {currentScreen === 'invoice' && (
+              <>
+                <ServiceInvoicePage
+                  invoiceRequest={invoiceRequest}
+                  onBackToProfile={() => setCurrentScreen('profile')}
+                />
+                {renderSharedFooter()}
+              </>
+            )}
+          </div>
         </div>
       </div>
-      <TroubleshootChatbot />
-    </div>
+      <TroubleshootChatbot onNavigateToRequest={handleChatbotSubmitRequest} />
+    </>
   );
-}  
+}
 
 export default App;
