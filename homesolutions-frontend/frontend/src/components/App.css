@@ -567,16 +567,25 @@ body {
 }
 
 .social-pill {
-  min-width: 34px;
-  height: 28px;
+  min-width: 40px;
+  height: 40px;
   border-radius: 999px;
   border: 1px solid #c8dbf0;
   background: #f0f6fd;
   color: #2c5f8a;
-  font-size: 12px;
-  font-weight: 700;
   display: grid;
   place-items: center;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.social-pill:hover {
+  background: #2c5f8a;
+  color: #fff;
+  border-color: #2c5f8a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(44, 95, 138, 0.25);
 }
 
 .copyright {
