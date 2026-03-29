@@ -2,10 +2,17 @@ import React, { useState, useEffect } from "react";
 import "./components/App.css"; // Correct path to your styles
 import ProvidersList from "./components/ProvidersList";
 import RequestForm from "./components/RequestForm";
+import LoginPage from "./components/LoginPage";
+import SignupPage from "./components/SignupPage";
 
 function App() {
   const [currentScreen, setCurrentScreen] = useState('home');
   const [selectedProvider, setSelectedProvider] = useState(null);
+  const [authMode, setAuthMode] = useState('login');
+  const [currentUser, setCurrentUser] = useState(() => {
+    const stored = localStorage.getItem('hs_user');
+    return stored ? JSON.parse(stored) : null;
+  });
 
   useEffect(() => {
     if (currentScreen !== 'form') {
@@ -22,6 +29,50 @@ function App() {
     setCurrentScreen('form');
   };
 
+  const handleAuthSuccess = (user) => {
+    setCurrentUser(user);
+    localStorage.setItem('hs_user', JSON.stringify(user));
+    setCurrentScreen('home');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('hs_user');
+    setCurrentUser(null);
+    setAuthMode('login');
+    setCurrentScreen('home');
+    setSelectedProvider(null);
+  };
+
+  if (!currentUser) {
+    return (
+      <div className="shell">
+        <div className="phone auth-shell">
+          <div className="topbar">
+            <div>
+              <div className="topbar-kicker">WELCOME</div>
+              <div className="topbar-brand">HomeSolutions</div>
+            </div>
+            <div className="signal-dot" aria-hidden="true" />
+          </div>
+
+          <div className="body">
+            {authMode === 'login' ? (
+              <LoginPage
+                onLoginSuccess={handleAuthSuccess}
+                onSwitchToSignup={() => setAuthMode('signup')}
+              />
+            ) : (
+              <SignupPage
+                onSignupSuccess={handleAuthSuccess}
+                onSwitchToLogin={() => setAuthMode('login')}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="shell">
       <div className="tab-bar">
@@ -36,7 +87,11 @@ function App() {
             <div className="topbar-kicker">HOME MAINTENANCE</div>
             <div className="topbar-brand">HomeSolutions</div>
           </div>
-          <div className="signal-dot" aria-hidden="true" />
+
+          <div className="topbar-user-area">
+            <div className="user-chip">Hi, {currentUser.full_name || 'User'}</div>
+            <button className="btn-s btn-logout" onClick={handleLogout}>Log Out</button>
+          </div>
         </div>
 
         <div className="body">
@@ -81,6 +136,7 @@ function App() {
 
           {currentScreen === 'form' && (
             <RequestForm
+              currentUser={currentUser}
               selectedProvider={selectedProvider}
               onBack={goToProviders}
               onSuccess={() => setCurrentScreen('home')}

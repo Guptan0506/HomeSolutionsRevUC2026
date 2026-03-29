@@ -1,10 +1,12 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
+const SALT_ROUNDS = 10;
 
 // Middleware
 app.use(cors());
@@ -25,6 +27,103 @@ pool.connect((err) => {
     console.error('Database connection failed:', err.message);
   } else {
     console.log('Connected to HomeServices database!');
+  }
+});
+
+const initializeAuthTable = async () => {
+  try {
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS app_users (
+        user_id SERIAL PRIMARY KEY,
+        full_name VARCHAR(120) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+    console.log('Auth table ready (app_users).');
+  } catch (err) {
+    console.error('Failed to initialize auth table:', err.message);
+  }
+};
+
+initializeAuthTable();
+
+// POST create a user account
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { fullName, email, password } = req.body;
+
+    if (!fullName || !email || !password) {
+      return res.status(400).json({ message: 'fullName, email, and password are required.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const existingUser = await pool.query('SELECT user_id FROM app_users WHERE email = $1', [normalizedEmail]);
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ message: 'An account with this email already exists.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    const result = await pool.query(
+      `INSERT INTO app_users (full_name, email, password_hash)
+       VALUES ($1, $2, $3)
+       RETURNING user_id, full_name, email, created_at`,
+      [fullName.trim(), normalizedEmail, passwordHash]
+    );
+
+    return res.status(201).json({
+      message: 'Account created successfully.',
+      user: result.rows[0],
+    });
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// POST login with email/password
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'email and password are required.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      'SELECT user_id, full_name, email, password_hash FROM app_users WHERE email = $1',
+      [normalizedEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+
+    const user = result.rows[0];
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+
+    if (!isValidPassword) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+
+    return res.json({
+      message: 'Login successful.',
+      user: {
+        user_id: user.user_id,
+        full_name: user.full_name,
+        email: user.email,
+      },
+    });
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).json({ message: 'Server Error' });
   }
 });
 

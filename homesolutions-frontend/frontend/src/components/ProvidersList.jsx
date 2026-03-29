@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ProviderCard from './ProviderCard';
+import { buildApiUrl } from '../api';
 
 function ProvidersList({ onSelect }) {
   const [providers, setProviders] = useState([]);
@@ -9,7 +10,7 @@ function ProvidersList({ onSelect }) {
   useEffect(() => {
     const getProviders = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/providers');
+        const response = await fetch(buildApiUrl('/api/providers'));
 
         if (!response.ok) {
           throw new Error('Failed to fetch providers');
@@ -20,7 +21,7 @@ function ProvidersList({ onSelect }) {
         setLoading(false);
       } catch (err) {
         console.error('Fetch error:', err);
-        setError('Could not connect to the service database. Please make sure backend is running on port 5000.');
+        setError('Could not connect to the service database. Please make sure backend is running.');
         setLoading(false);
       }
     };
@@ -51,17 +52,24 @@ function ProvidersList({ onSelect }) {
       <div className="sec-label">Available Professionals</div>
 
       {Array.isArray(providers) && providers.length > 0 ? (
-        providers.map((pro) => (
-          <ProviderCard
-            key={pro.id}
-            name={pro.full_name}
-            type={pro.service_type}
-            price={pro.hourly_rate}
-            experience={pro.experience_years}
-            initials={pro.full_name ? pro.full_name.charAt(0) : 'P'}
-            onSelect={() => onSelect(pro)}
-          />
-        ))
+        providers.map((pro) => {
+          const providerName = pro.sp_name || pro.full_name || 'Professional';
+          const providerType = pro.specialization || pro.service_type || 'General Services';
+          const providerPrice = pro.hourly_charge || pro.hourly_rate || '--';
+          const providerExperience = pro.experience_years || pro.experience || 'N/A';
+
+          return (
+            <ProviderCard
+              key={pro.sp_id || pro.id}
+              name={providerName}
+              type={providerType}
+              price={providerPrice}
+              experience={providerExperience}
+              initials={providerName.charAt(0)}
+              onSelect={() => onSelect(pro)}
+            />
+          );
+        })
       ) : (
         <div className="state-card">
           <p className="state-title">No providers found</p>

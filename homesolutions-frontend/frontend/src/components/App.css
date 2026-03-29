@@ -109,6 +109,32 @@ body {
   box-shadow: 0 0 0 6px rgba(149, 226, 187, 0.18);
 }
 
+.topbar-user-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-chip {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-logout {
+  background: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+  padding: 8px 12px;
+}
+
 .body {
   overflow-y: auto;
   flex: 1;
@@ -392,6 +418,95 @@ body {
   min-width: 150px;
 }
 
+.auth-shell {
+  min-height: 680px;
+}
+
+.auth-wrap {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.auth-card {
+  width: min(100%, 520px);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 16px 28px rgba(35, 53, 67, 0.1);
+}
+
+.auth-kicker {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-500);
+  font-weight: 800;
+}
+
+.auth-title {
+  margin-top: 8px;
+  font-family: 'Fraunces', serif;
+  font-size: clamp(30px, 5vw, 40px);
+  color: #0e3d51;
+  line-height: 1.1;
+}
+
+.auth-copy {
+  margin-top: 8px;
+  color: var(--ink-700);
+  line-height: 1.55;
+  font-size: 14px;
+}
+
+.auth-form {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.auth-error {
+  background: #fff0ee;
+  border: 1px solid #edc4bc;
+  color: #8d3728;
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 13px;
+}
+
+.auth-switch-text {
+  margin-top: 14px;
+  color: var(--ink-700);
+  font-size: 13px;
+}
+
+.auth-switch-btn {
+  border: 0;
+  background: none;
+  color: var(--accent-ocean);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-switch-btn:hover {
+  text-decoration: underline;
+}
+
 @keyframes reveal {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -428,5 +543,23 @@ body {
 
   .topbar-brand {
     font-size: 22px;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .topbar-user-area {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .user-chip {
+    max-width: 72%;
+  }
+
+  .auth-card {
+    padding: 20px 16px;
   }
 }
