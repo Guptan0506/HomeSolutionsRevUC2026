@@ -221,7 +221,7 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
               <label className="field-label" htmlFor="signup-picture">Profile Picture URL (Optional)</label>
               <input
                 id="signup-picture"
-                type="url"
+                type="text"
                 className="input-field auth-input"
                 value={profilePictureUrl}
                 onChange={(e) => setProfilePictureUrl(e.target.value)}
