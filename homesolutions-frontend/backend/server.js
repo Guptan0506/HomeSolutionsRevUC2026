@@ -9,6 +9,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const app = express();
 const PORT = process.env.PORT || 5001;
 const SALT_ROUNDS = 10;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const CHAT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const CHAT_RATE_LIMIT_MAX_REQUESTS = 12;
 const MAX_CHAT_MESSAGE_LENGTH = 1000;
@@ -318,7 +319,7 @@ function getGeminiModel() {
   }
 
   const client = new GoogleGenerativeAI(apiKey);
-  geminiModel = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  geminiModel = client.getGenerativeModel({ model: GEMINI_MODEL });
   return geminiModel;
 }
 
@@ -1064,6 +1065,13 @@ app.post('/api/chat/troubleshoot', async (req, res) => {
     return res.json({ assistantReply });
   } catch (err) {
     console.error('Chat troubleshoot error:', err.message || err);
+
+    if (String(err.message || '').includes('no longer available')) {
+      return res.status(503).json({
+        message: `Configured Gemini model is unavailable. Set GEMINI_MODEL to a current model (current: ${GEMINI_MODEL}).`,
+      });
+    }
+
     return res.status(500).json({ message: 'Unable to get troubleshooting help right now.' });
   }
 });
