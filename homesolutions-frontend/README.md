@@ -1,6 +1,6 @@
-# HomeSolutions
+# FixMate
 
-HomeSolutions is a full-stack web app for connecting customers with local home service professionals such as plumbers and electricians.
+FixMate is a full-stack web app for connecting customers with local home service professionals such as plumbers and electricians.
 
 The project currently includes:
 

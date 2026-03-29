@@ -438,16 +438,16 @@ function App() {
   };
 
   const renderSharedFooter = () => (
-    <footer className="home-footer" aria-label="HomeSolutions footer">
+    <footer className="home-footer" aria-label="FixMate footer">
       <p>Phone: +1 (555) 987-1234</p>
-      <p>Email: support@homesolutions.com</p>
+        <p>Email: support@fixmate.com</p>
       <div className="social-row" aria-label="Social media">
         <span className="social-pill" aria-label="Facebook">FB</span>
         <span className="social-pill" aria-label="Instagram">IG</span>
         <span className="social-pill" aria-label="X">X</span>
         <span className="social-pill" aria-label="LinkedIn">IN</span>
       </div>
-      <p className="copyright">&copy; HomeSolutions</p>
+      <p className="copyright">&copy; FixMate</p>
     </footer>
   );
 
@@ -463,10 +463,10 @@ function App() {
         <div className="topbar">
           <div className="topbar-left">
             <button className="brand-wrap" onClick={() => setCurrentScreen('home')}>
-              <span className="brand-logo" aria-hidden="true">HS</span>
+              <span className="brand-logo" aria-hidden="true">FM</span>
               <span>
                 <span className="topbar-kicker">HOME MAINTENANCE</span>
-                <span className="topbar-brand">HomeSolutions</span>
+                <span className="topbar-brand">FixMate</span>
               </span>
             </button>
           </div>

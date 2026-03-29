@@ -104,7 +104,7 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
       <div className="auth-card">
         <p className="auth-kicker">New Account</p>
         <h1 className="auth-title">Create your profile</h1>
-        <p className="auth-copy">Join HomeSolutions and book trusted professionals anytime.</p>
+        <p className="auth-copy">Join FixMate and book trusted professionals anytime.</p>
 
         <div className="role-selector">
           <p className="role-label">Join as:</p>
