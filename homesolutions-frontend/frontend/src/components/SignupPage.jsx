@@ -68,7 +68,7 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
         requestBody.hourlyCharge = parseFloat(hourlyCharge);
         requestBody.experienceYears = experienceYears ? parseInt(experienceYears) : 0;
         requestBody.services = services;
-        requestBody.profilePictureUrl = profilePictureUrl;
+        requestBody.profilePictureUrl = profilePictureUrl.trim() || null;
       }
 
       console.log('Signup request body:', requestBody);
@@ -218,7 +218,7 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
                 placeholder="e.g., Installation, Repair, Maintenance"
               />
 
-              <label className="field-label" htmlFor="signup-picture">Profile Picture URL</label>
+              <label className="field-label" htmlFor="signup-picture">Profile Picture URL (Optional)</label>
               <input
                 id="signup-picture"
                 type="url"

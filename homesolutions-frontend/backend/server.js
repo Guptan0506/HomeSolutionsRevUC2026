@@ -143,6 +143,7 @@ const initializeServiceProviderTable = async () => {
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS profile_picture_url TEXT`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await pool.query(`ALTER TABLE service_provider ALTER COLUMN sp_services DROP NOT NULL`);
+    await pool.query(`ALTER TABLE service_provider ALTER COLUMN profile_picture_url DROP NOT NULL`);
 
     console.log('Service Provider table ready.');
   } catch (err) {
