@@ -474,6 +474,19 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+
+    const accountLookup = await pool.query(
+      `SELECT user_role FROM app_users WHERE email = $1 LIMIT 1`,
+      [normalizedEmail]
+    );
+
+    if (accountLookup.rows.length > 0 && accountLookup.rows[0].user_role !== userRole) {
+      const existingRole = accountLookup.rows[0].user_role;
+      return res.status(401).json({
+        message: `This email is registered as ${existingRole === 'service_provider' ? 'Service Provider' : 'Customer'}. Switch account type and try again.`,
+      });
+    }
+
     const result = await pool.query(
       `SELECT
          u.user_id,
