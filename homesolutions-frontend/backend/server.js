@@ -344,6 +344,8 @@ function getGeminiModel() {
 
 // POST create a user account
 app.post('/api/auth/signup', async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const { 
       fullName, 
@@ -379,7 +381,10 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const existingUser = await pool.query('SELECT user_id FROM app_users WHERE email = $1', [normalizedEmail]);
+
+    await client.query('BEGIN');
+
+    const existingUser = await client.query('SELECT user_id FROM app_users WHERE email = $1', [normalizedEmail]);
 
     if (existingUser.rows.length > 0) {
       return res.status(409).json({ message: 'An account with this email already exists.' });
@@ -388,7 +393,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     
     // Create user  
-    const userResult = await pool.query(
+    const userResult = await client.query(
       `INSERT INTO app_users (full_name, email, password_hash, user_role)
        VALUES ($1, $2, $3, $4)
        RETURNING user_id, full_name, email, user_role, created_at`,
@@ -399,37 +404,47 @@ app.post('/api/auth/signup', async (req, res) => {
 
     // If service provider, also create profile in service_provider table
     if (userRole === 'service_provider') {
-      try {
-        await pool.query(
-          `INSERT INTO service_provider (
-             user_id, sp_name, sp_email, sp_phone, sp_location,
-             specialization, hourly_charge, experience_years, services,
-             profile_picture_url
-           )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [
-            user.user_id,
-            fullName.trim(),
-            normalizedEmail,
-            '',  // sp_phone
-            '',  // sp_location
-            specialization || '',
-            parseFloat(hourlyCharge),
-            Number(experienceYears || 0),
-            services || specialization || '',
-            profilePictureUrl || null,
-          ]
-        );
-      } catch (spErr) {
-        // Legacy schemas may reject user_id foreign key values; fallback to email-based provider row.
+      const parsedHourlyCharge = Number.parseFloat(hourlyCharge);
+      const parsedExperienceYears = Number.parseInt(experienceYears, 10) || 0;
+      const normalizedServices = services || specialization || '';
+
+      const updateResult = await client.query(
+        `UPDATE service_provider
+         SET sp_name = $2,
+             sp_email = $3,
+             specialization = $4,
+             hourly_charge = $5,
+             experience_years = $6,
+             services = $7,
+             profile_picture_url = $8,
+             sp_services = $9,
+             sp_base_price_per_hr = $10
+         WHERE user_id = $1`,
+        [
+          user.user_id,
+          fullName.trim(),
+          normalizedEmail,
+          specialization || '',
+          parsedHourlyCharge,
+          parsedExperienceYears,
+          normalizedServices,
+          profilePictureUrl || null,
+          normalizedServices,
+          parsedHourlyCharge,
+        ]
+      );
+
+      if (updateResult.rowCount === 0) {
+        await client.query('SAVEPOINT provider_insert_attempt');
+
         try {
-          await pool.query(
+          await client.query(
             `INSERT INTO service_provider (
                user_id, sp_name, sp_email, sp_phone, sp_location,
                specialization, hourly_charge, experience_years, services,
-               profile_picture_url
+               profile_picture_url, sp_services, sp_base_price_per_hr
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
             [
               user.user_id,
               fullName.trim(),
@@ -437,25 +452,62 @@ app.post('/api/auth/signup', async (req, res) => {
               '',
               '',
               specialization || '',
-              parseFloat(hourlyCharge),
-              Number(experienceYears || 0),
-              services || specialization || '',
+              parsedHourlyCharge,
+              parsedExperienceYears,
+              normalizedServices,
               profilePictureUrl || null,
+              normalizedServices,
+              parsedHourlyCharge,
             ]
           );
-        } catch (fallbackErr) {
-          console.error('Error creating service provider profile:', fallbackErr.message || spErr.message);
+        } catch (insertErr) {
+          if (!String(insertErr.message || '').includes('service_provider_user_id_fkey')) {
+            throw insertErr;
+          }
+
+          await client.query('ROLLBACK TO SAVEPOINT provider_insert_attempt');
+
+          // Legacy environments may have mismatched FK metadata; fallback to email-linked row.
+          await client.query(
+            `INSERT INTO service_provider (
+               user_id, sp_name, sp_email, sp_phone, sp_location,
+               specialization, hourly_charge, experience_years, services,
+               profile_picture_url, sp_services, sp_base_price_per_hr
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            [
+              null,
+              fullName.trim(),
+              normalizedEmail,
+              '',
+              '',
+              specialization || '',
+              parsedHourlyCharge,
+              parsedExperienceYears,
+              normalizedServices,
+              profilePictureUrl || null,
+              normalizedServices,
+              parsedHourlyCharge,
+            ]
+          );
         }
+
+        await client.query('RELEASE SAVEPOINT provider_insert_attempt');
       }
     }
+
+    await client.query('COMMIT');
 
     return res.status(201).json({
       message: 'Account created successfully.',
       user,
     });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err.message);
     return res.status(500).json({ message: 'Server Error' });
+  } finally {
+    client.release();
   }
 });
 
