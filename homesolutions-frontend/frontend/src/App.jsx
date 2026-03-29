@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaFacebook, FaInstagram, FaXTwitter, FaLinkedin } from "react-icons/fa6";
 import "./components/App.css"; // Correct path to your styles
 import heroImage from "./Assets/1.png";
 import logoImage from "./Assets/2.png";
@@ -456,18 +455,10 @@ function App() {
       <p>Phone: +1 (555) 987-1234</p>
         <p>Email: support@fixmate.com</p>
       <div className="social-row" aria-label="Social media">
-        <a href="https://facebook.com" className="social-pill" aria-label="Facebook" target="_blank" rel="noopener noreferrer">
-          <FaFacebook size={20} />
-        </a>
-        <a href="https://instagram.com" className="social-pill" aria-label="Instagram" target="_blank" rel="noopener noreferrer">
-          <FaInstagram size={20} />
-        </a>
-        <a href="https://twitter.com" className="social-pill" aria-label="X (formerly Twitter)" target="_blank" rel="noopener noreferrer">
-          <FaXTwitter size={20} />
-        </a>
-        <a href="https://linkedin.com" className="social-pill" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer">
-          <FaLinkedin size={20} />
-        </a>
+        <span className="social-pill" aria-label="Facebook">FB</span>
+        <span className="social-pill" aria-label="Instagram">IG</span>
+        <span className="social-pill" aria-label="X">X</span>
+        <span className="social-pill" aria-label="LinkedIn">IN</span>
       </div>
       <p className="copyright">&copy; FixMate</p>
     </footer>
