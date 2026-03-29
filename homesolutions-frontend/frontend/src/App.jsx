@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./components/App.css"; // Correct path to your styles
+import heroImage from "./Assets/1.png";
+import logoImage from "./Assets/2.png";
 import RequestForm from "./components/RequestForm";
 import LoginPage from "./components/LoginPage";
 import SignupPage from "./components/SignupPage";
@@ -463,7 +465,7 @@ function App() {
         <div className="topbar">
           <div className="topbar-left">
             <button className="brand-wrap" onClick={() => setCurrentScreen('home')}>
-              <span className="brand-logo" aria-hidden="true">FM</span>
+              <img src={logoImage} alt="HomeSolutions" className="brand-logo" />
               <span>
                 <span className="topbar-kicker">HOME MAINTENANCE</span>
                 <span className="topbar-brand">FixMate</span>
@@ -495,30 +497,36 @@ function App() {
           {currentScreen === 'home' && (
             <>
               <div className="hero-band">
-                <div className="hero-text-wrap">
-                  <p className="hero-eyebrow">Fast booking. Trusted experts.</p>
-                  <h1>Your home deserves five-star care.</h1>
-                  <p className="hero-sub">
-                    Discover local professionals for plumbing, electrical, and maintenance work in just a few taps.
-                  </p>
+                <div className="hero-image-panel" aria-hidden="true">
+                  <img src={heroImage} alt="" className="hero-img" />
                 </div>
 
-                <div className="hero-actions">
-                  <button className="btn-p" onClick={goToRequestForm}>Request a Service</button>
-                </div>
+                <div className="hero-content">
+                  <div className="hero-text-wrap">
+                    <p className="hero-eyebrow">Fast booking. Trusted experts.</p>
+                    <h1>Your home deserves five-star care.</h1>
+                    <p className="hero-sub">
+                      Discover local professionals for plumbing, electrical, and maintenance work in just a few taps.
+                    </p>
+                  </div>
 
-                <div className="stats-grid">
-                  <div className="stat-card">
-                    <span className="stat-value">24/7</span>
-                    <span className="stat-label">Emergency Support</span>
+                  <div className="hero-actions">
+                    <button className="btn-p" onClick={goToRequestForm}>Request a Service</button>
                   </div>
-                  <div className="stat-card">
-                    <span className="stat-value">4.9/5</span>
-                    <span className="stat-label">Avg. Client Rating</span>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-value">30m</span>
-                    <span className="stat-label">Average Response</span>
+
+                  <div className="stats-grid">
+                    <div className="stat-card">
+                      <span className="stat-value">24/7</span>
+                      <span className="stat-label">Emergency Support</span>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-value">4.9/5</span>
+                      <span className="stat-label">Avg. Client Rating</span>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-value">30m</span>
+                      <span className="stat-label">Average Response</span>
+                    </div>
                   </div>
                 </div>
               </div>

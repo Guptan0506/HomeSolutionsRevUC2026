@@ -246,6 +246,19 @@ initializeServiceProviderTable();
 initializeServiceRequestsTable();
 initializeInvoicesTable();
 
+// Auth middleware: requires a user identifier in params, body, or x-user-id header
+function requireAuth(req, res, next) {
+  const userId =
+    req.params?.user_id ||
+    req.params?.sp_id ||
+    req.body?.user_id ||
+    req.headers['x-user-id'];
+  if (!userId) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+  next();
+}
+
 // POST create a user account
 app.post('/api/auth/signup', async (req, res) => {
   try {
@@ -308,9 +321,9 @@ app.post('/api/auth/signup', async (req, res) => {
           `INSERT INTO service_provider (
              user_id, sp_name, sp_email, sp_phone, sp_location,
              specialization, hourly_charge, experience_years, services,
-             sp_services, sp_base_price_per_hr, profile_picture_url
+             profile_picture_url
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             user.user_id,
             fullName.trim(),
@@ -321,8 +334,6 @@ app.post('/api/auth/signup', async (req, res) => {
             parseFloat(hourlyCharge),
             Number(experienceYears || 0),
             services || specialization || '',
-            services || specialization || '',
-            parseFloat(hourlyCharge),
             profilePictureUrl || null,
           ]
         );
@@ -331,12 +342,13 @@ app.post('/api/auth/signup', async (req, res) => {
         try {
           await pool.query(
             `INSERT INTO service_provider (
-               sp_name, sp_email, sp_phone, sp_location,
+               user_id, sp_name, sp_email, sp_phone, sp_location,
                specialization, hourly_charge, experience_years, services,
-               sp_services, sp_base_price_per_hr, profile_picture_url
+               profile_picture_url
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [
+              user.user_id,
               fullName.trim(),
               normalizedEmail,
               '',
@@ -345,8 +357,6 @@ app.post('/api/auth/signup', async (req, res) => {
               parseFloat(hourlyCharge),
               Number(experienceYears || 0),
               services || specialization || '',
-              services || specialization || '',
-              parseFloat(hourlyCharge),
               profilePictureUrl || null,
             ]
           );
@@ -457,6 +467,9 @@ app.get('/api/providers/:id', async (req, res) => {
     const result = await pool.query(
       'SELECT * FROM service_provider WHERE sp_id = $1', [id]
     );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Provider not found.' });
+    }
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err.message);
@@ -502,7 +515,9 @@ app.get('/api/providers/by-user/:user_id', async (req, res) => {
 // Test endpoint: Check database contents
 app.get('/api/test-db', async (req, res) => {
   try {
-    const usersResult = await pool.query('SELECT * FROM app_users');
+    const usersResult = await pool.query(
+      'SELECT user_id, full_name, email, user_role, created_at FROM app_users'
+    );
     const providersResult = await pool.query('SELECT * FROM service_provider');
     
     res.json({
@@ -620,7 +635,7 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
 const toMoney = (value) => Number(Number(value || 0).toFixed(2));
 
 // POST submit a new service request
-app.post('/api/requests', async (req, res) => {
+app.post('/api/requests', requireAuth, async (req, res) => {
   try {
     const { user_id, sp_id, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude } = req.body;
     const normalizedUrgency = String(urgency || 'low').trim().toLowerCase();
@@ -647,7 +662,7 @@ app.post('/api/requests', async (req, res) => {
 });
 
 // GET all requests for a specific user
-app.get('/api/requests/user/:user_id', async (req, res) => {
+app.get('/api/requests/user/:user_id', requireAuth, async (req, res) => {
   try {
     const { user_id } = req.params;
     const result = await pool.query(
@@ -720,7 +735,7 @@ app.patch('/api/requests/:id/customer', async (req, res) => {
 });
 
 // GET all requests for a specific service provider
-app.get('/api/requests/provider/:sp_id', async (req, res) => {
+app.get('/api/requests/provider/:sp_id', requireAuth, async (req, res) => {
   try {
     const { sp_id } = req.params;
     const result = await pool.query(
