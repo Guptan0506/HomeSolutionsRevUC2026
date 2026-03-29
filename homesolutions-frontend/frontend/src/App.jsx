@@ -9,6 +9,7 @@ import CustomerProfilePage from "./components/CustomerProfilePage";
 import ServiceProviderSelectionPage from "./components/ServiceProviderSelectionPage";
 import ServiceProviderProfilePage from "./components/ServiceProviderProfilePage";
 import ServiceInvoicePage from "./components/ServiceInvoicePage";
+import TroubleshootChatbot from "./components/TroubleshootChatbot";
 import { buildApiUrl, getApiErrorMessage, readJsonSafely } from "./api";
 
 const featuredProfessionals = [
@@ -742,6 +743,7 @@ function App() {
           )}
         </div>
       </div>
+      <TroubleshootChatbot />
     </div>
   );
 }  

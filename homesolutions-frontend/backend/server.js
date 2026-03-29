@@ -3,11 +3,28 @@ const path = require('path');
 const { Pool } = require('pg');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 const SALT_ROUNDS = 10;
+const CHAT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const CHAT_RATE_LIMIT_MAX_REQUESTS = 12;
+const MAX_CHAT_MESSAGE_LENGTH = 1000;
+
+const troubleshootRateLimitStore = new Map();
+let geminiModel = null;
+
+const TROUBLESHOOT_SYSTEM_PROMPT = `You are FixMate's home troubleshooting assistant.
+Give beginner-friendly and safety-first guidance for home issues.
+Rules:
+- Keep responses concise and practical (3 to 7 numbered steps where possible).
+- Suggest only basic checks users can do safely.
+- For electrical, gas, major plumbing, structural, mold, fire, or injury risks: tell the user to stop and contact a licensed professional.
+- Never provide dangerous or high-risk DIY instructions.
+- If information is missing, ask one short clarifying question before giving risky advice.
+- End with one safety reminder sentence.`;
 
 // Middleware
 app.use(cors());
@@ -257,6 +274,52 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ message: 'Authentication required.' });
   }
   next();
+}
+
+function hitChatRateLimit(clientKey) {
+  const now = Date.now();
+  const existing = troubleshootRateLimitStore.get(clientKey) || [];
+  const recent = existing.filter((ts) => now - ts < CHAT_RATE_LIMIT_WINDOW_MS);
+
+  if (recent.length >= CHAT_RATE_LIMIT_MAX_REQUESTS) {
+    troubleshootRateLimitStore.set(clientKey, recent);
+    return true;
+  }
+
+  recent.push(now);
+  troubleshootRateLimitStore.set(clientKey, recent);
+  return false;
+}
+
+function sanitizeConversationHistory(history) {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history
+    .slice(-8)
+    .map((entry) => {
+      const role = entry?.role === 'assistant' ? 'assistant' : 'user';
+      const content = typeof entry?.content === 'string' ? entry.content.trim() : '';
+      return { role, content: content.slice(0, 500) };
+    })
+    .filter((entry) => entry.content.length > 0);
+}
+
+function getGeminiModel() {
+  if (geminiModel) {
+    return geminiModel;
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return null;
+  }
+
+  const client = new GoogleGenerativeAI(apiKey);
+  geminiModel = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  return geminiModel;
 }
 
 // POST create a user account
@@ -946,6 +1009,62 @@ app.get('/api/invoices/:request_id', async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
+  }
+});
+
+app.post('/api/chat/troubleshoot', async (req, res) => {
+  try {
+    const { userMessage, conversationHistory } = req.body || {};
+    const trimmedMessage = typeof userMessage === 'string' ? userMessage.trim() : '';
+
+    if (!trimmedMessage) {
+      return res.status(400).json({ message: 'Please enter a troubleshooting question.' });
+    }
+
+    if (trimmedMessage.length > MAX_CHAT_MESSAGE_LENGTH) {
+      return res.status(400).json({ message: `Message must be under ${MAX_CHAT_MESSAGE_LENGTH} characters.` });
+    }
+
+    const clientKey = String(req.ip || 'unknown');
+    if (hitChatRateLimit(clientKey)) {
+      return res.status(429).json({ message: 'Too many assistant requests. Please wait a minute and try again.' });
+    }
+
+    const model = getGeminiModel();
+
+    if (!model) {
+      return res.status(503).json({ message: 'Assistant is not configured yet. Please set GEMINI_API_KEY on the backend.' });
+    }
+
+    const safeHistory = sanitizeConversationHistory(conversationHistory);
+    const historyBlock = safeHistory.length > 0
+      ? safeHistory.map((entry) => `${entry.role.toUpperCase()}: ${entry.content}`).join('\n')
+      : 'No previous conversation.';
+
+    const fullPrompt = [
+      TROUBLESHOOT_SYSTEM_PROMPT,
+      `Conversation so far:\n${historyBlock}`,
+      `User issue: ${trimmedMessage}`,
+      'Respond with actionable help and clear safety boundaries.',
+    ].join('\n\n');
+
+    const geminiResult = await Promise.race([
+      model.generateContent(fullPrompt),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Assistant request timed out.')), 20000);
+      }),
+    ]);
+
+    const assistantReply = geminiResult?.response?.text?.().trim();
+
+    if (!assistantReply) {
+      return res.status(502).json({ message: 'Assistant could not generate a response. Please try again.' });
+    }
+
+    return res.json({ assistantReply });
+  } catch (err) {
+    console.error('Chat troubleshoot error:', err.message || err);
+    return res.status(500).json({ message: 'Unable to get troubleshooting help right now.' });
   }
 });
 

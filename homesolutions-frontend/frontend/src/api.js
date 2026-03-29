@@ -30,3 +30,22 @@ export function getApiErrorMessage(response, data, fallbackMessage) {
 
   return fallbackMessage;
 }
+
+export async function sendTroubleshootMessage(userMessage, conversationHistory = []) {
+  const response = await fetch(buildApiUrl('/api/chat/troubleshoot'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userMessage,
+      conversationHistory,
+    }),
+  });
+
+  const data = await readJsonSafely(response);
+
+  if (!response.ok || !data?.assistantReply) {
+    throw new Error(getApiErrorMessage(response, data, 'Unable to get troubleshooting help right now.'));
+  }
+
+  return data.assistantReply;
+}
