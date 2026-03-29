@@ -486,7 +486,7 @@ function App() {
           <div className="topbar">
             <div className="topbar-left">
               <button className="brand-wrap" onClick={() => setCurrentScreen('home')}>
-                <img src={logoImage} alt="HomeSolutions" className="brand-logo" />
+                <img src={logoImage} alt="FixMate" className="brand-logo" />
                 <span>
                   <span className="topbar-kicker">HOME MAINTENANCE</span>
                   <span className="topbar-brand">FixMate</span>
