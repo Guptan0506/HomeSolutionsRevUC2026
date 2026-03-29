@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { buildApiUrl } from '../api';
+import { buildApiUrl, getApiErrorMessage, readJsonSafely } from '../api';
 
 function RequestForm({ currentUser, selectedProvider, onBack, onSuccess }) {
   const [description, setDescription] = useState('');
@@ -46,10 +46,10 @@ function RequestForm({ currentUser, selectedProvider, onBack, onSuccess }) {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await readJsonSafely(response);
 
       if (!response.ok) {
-        throw new Error(data.message || 'Unable to submit request right now.');
+        throw new Error(getApiErrorMessage(response, data, 'Unable to submit request right now.'));
       }
 
       alert('Request submitted successfully!');

@@ -57,6 +57,7 @@ function ProvidersList({ onSelect }) {
           const providerType = pro.specialization || pro.service_type || 'General Services';
           const providerPrice = pro.hourly_charge || pro.hourly_rate || '--';
           const providerExperience = pro.experience_years || pro.experience || 'N/A';
+          const profilePictureUrl = pro.profile_picture_url || null;
 
           return (
             <ProviderCard
@@ -66,6 +67,7 @@ function ProvidersList({ onSelect }) {
               price={providerPrice}
               experience={providerExperience}
               initials={providerName.charAt(0)}
+              profilePictureUrl={profilePictureUrl}
               onSelect={() => onSelect(pro)}
             />
           );

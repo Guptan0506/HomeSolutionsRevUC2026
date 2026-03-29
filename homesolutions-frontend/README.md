@@ -55,7 +55,7 @@ DB_PASSWORD=your_password_here
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=homesolutions_db
-PORT=5000
+PORT=5001
 ```
 
 Optional frontend override (only needed if your API is not on the same host/proxy):
@@ -63,7 +63,7 @@ Optional frontend override (only needed if your API is not on the same host/prox
 Create `.env` in the project root:
 
 ```env
-VITE_API_BASE_URL=http://localhost:5000
+VITE_API_BASE_URL=http://localhost:5001
 ```
 
 If `VITE_API_BASE_URL` is not set, the frontend will call `/api/*` and rely on the Vite proxy in development.
@@ -115,7 +115,7 @@ node server.js
 
 The API runs on:
 
-- `http://localhost:5000`
+- `http://localhost:5001` (default in this project)
 
 ### 4. Start frontend dev server
 
@@ -129,7 +129,13 @@ The frontend runs on:
 
 - `http://localhost:5173` (default Vite port)
 
-In development, requests to `/api/*` are proxied to `http://localhost:5000` by `vite.config.js`.
+In development, requests to `/api/*` are proxied to `http://localhost:5001` by `vite.config.js`.
+
+If you use a different backend port, set `VITE_PROXY_TARGET` in root `.env`, for example:
+
+```env
+VITE_PROXY_TARGET=http://localhost:5050
+```
 
 ## API Endpoints
 

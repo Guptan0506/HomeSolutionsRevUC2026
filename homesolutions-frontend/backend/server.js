@@ -1,11 +1,12 @@
 const express = require('express');
+const path = require('path');
 const { Pool } = require('pg');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 const SALT_ROUNDS = 10;
 
 // Middleware
@@ -13,18 +14,23 @@ app.use(cors());
 app.use(express.json());
 
 // PostgreSQL Connection
+const dbHost = process.env.DB_HOST || 'localhost';
+const dbPort = Number(process.env.DB_PORT || 5432);
+const useSsl = process.env.DB_SSL === 'true' || dbHost.includes('supabase.com');
+
 const pool = new Pool({
   user: process.env.DB_USER,
-  host: process.env.DB_HOST,
+  host: dbHost,
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
+  port: dbPort,
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
 });
 
 // Test database connection
 pool.connect((err) => {
   if (err) {
-    console.error('Database connection failed:', err.message);
+    console.error('Database connection failed:', err.message || err);
   } else {
     console.log('Connected to HomeServices database!');
   }
@@ -32,34 +38,112 @@ pool.connect((err) => {
 
 const initializeAuthTable = async () => {
   try {
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS app_users (
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_users (
         user_id SERIAL PRIMARY KEY,
         full_name VARCHAR(120) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
+        user_role VARCHAR(50) DEFAULT 'customer' NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )`
-    );
+      )
+    `);
+
+    // Backfill any missing columns if the table already existed from an older schema.
+    await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS full_name VARCHAR(120)`);
+    await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
+    await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS password_hash TEXT`);
+    await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS user_role VARCHAR(50) DEFAULT 'customer' NOT NULL`);
+
+    // Ensure required columns are not nullable for auth flows.
+    await pool.query(`ALTER TABLE app_users ALTER COLUMN full_name SET NOT NULL`);
+    await pool.query(`ALTER TABLE app_users ALTER COLUMN email SET NOT NULL`);
+    await pool.query(`ALTER TABLE app_users ALTER COLUMN password_hash SET NOT NULL`);
+    await pool.query(`ALTER TABLE app_users ALTER COLUMN user_role SET NOT NULL`);
+
+    // Protect against duplicate emails.
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS app_users_email_unique_idx ON app_users (email)`);
+
     console.log('Auth table ready (app_users).');
   } catch (err) {
-    console.error('Failed to initialize auth table:', err.message);
+    console.error('Failed to initialize auth table:', err.message || err);
+  }
+};
+
+const initializeServiceProviderTable = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS service_provider (
+        sp_id SERIAL PRIMARY KEY,
+        user_id INTEGER UNIQUE REFERENCES app_users(user_id) ON DELETE CASCADE,
+        sp_name VARCHAR(120) NOT NULL,
+        sp_email VARCHAR(255),
+        sp_phone VARCHAR(20),
+        specialization VARCHAR(255),
+        hourly_charge DECIMAL(10, 2),
+        experience_years INTEGER DEFAULT 0,
+        services TEXT,
+        profile_picture_url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Backfill any missing columns if the table already existed
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS user_id INTEGER UNIQUE REFERENCES app_users(user_id) ON DELETE CASCADE`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_name VARCHAR(120)`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_email VARCHAR(255)`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_phone VARCHAR(20)`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS specialization VARCHAR(255)`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS hourly_charge DECIMAL(10, 2)`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS experience_years INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS services TEXT`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS profile_picture_url TEXT`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+
+    console.log('Service Provider table ready.');
+  } catch (err) {
+    console.error('Failed to initialize service provider table:', err.message || err);
   }
 };
 
 initializeAuthTable();
+initializeServiceProviderTable();
 
 // POST create a user account
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { fullName, email, password } = req.body;
+    const { 
+      fullName, 
+      email, 
+      password, 
+      userRole,
+      // Service provider fields
+      specialization,
+      hourlyCharge,
+      experienceYears,
+      services,
+      profilePictureUrl
+    } = req.body;
 
-    if (!fullName || !email || !password) {
-      return res.status(400).json({ message: 'fullName, email, and password are required.' });
+    if (!fullName || !email || !password || !userRole) {
+      return res.status(400).json({ message: 'fullName, email, password, and userRole are required.' });
+    }
+
+    const validRoles = ['customer', 'service_provider'];
+    if (!validRoles.includes(userRole)) {
+      return res.status(400).json({ message: 'userRole must be "customer" or "service_provider".' });
     }
 
     if (password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+    }
+
+    // For service providers, require profile information
+    if (userRole === 'service_provider') {
+      if (!specialization || !hourlyCharge) {
+        return res.status(400).json({ message: 'Service providers must provide specialization and base charge.' });
+      }
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -70,16 +154,41 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const result = await pool.query(
-      `INSERT INTO app_users (full_name, email, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING user_id, full_name, email, created_at`,
-      [fullName.trim(), normalizedEmail, passwordHash]
+    
+    // Create user  
+    const userResult = await pool.query(
+      `INSERT INTO app_users (full_name, email, password_hash, user_role)
+       VALUES ($1, $2, $3, $4)
+       RETURNING user_id, full_name, email, user_role, created_at`,
+      [fullName.trim(), normalizedEmail, passwordHash, userRole]
     );
+
+    const user = userResult.rows[0];
+
+    // If service provider, also create profile in service_provider table
+    if (userRole === 'service_provider') {
+      try {
+        await pool.query(
+          `INSERT INTO service_provider (sp_name, sp_email, sp_phone, sp_location, sp_services, sp_base_price_per_hr)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            fullName.trim(),
+            normalizedEmail,
+            '',  // sp_phone
+            '',  // sp_location
+            services || specialization || '',  // sp_services
+            parseFloat(hourlyCharge)  // sp_base_price_per_hr
+          ]
+        );
+      } catch (spErr) {
+        console.error('Error creating service provider profile:', spErr.message);
+        // Profile creation failure doesn't prevent user creation
+      }
+    }
 
     return res.status(201).json({
       message: 'Account created successfully.',
-      user: result.rows[0],
+      user,
     });
   } catch (err) {
     console.error(err.message);
@@ -90,20 +199,25 @@ app.post('/api/auth/signup', async (req, res) => {
 // POST login with email/password
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, userRole } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: 'email and password are required.' });
+    if (!email || !password || !userRole) {
+      return res.status(400).json({ message: 'email, password, and userRole are required.' });
+    }
+
+    const validRoles = ['customer', 'service_provider'];
+    if (!validRoles.includes(userRole)) {
+      return res.status(400).json({ message: 'userRole must be "customer" or "service_provider".' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
     const result = await pool.query(
-      'SELECT user_id, full_name, email, password_hash FROM app_users WHERE email = $1',
-      [normalizedEmail]
+      'SELECT user_id, full_name, email, password_hash, user_role FROM app_users WHERE email = $1 AND user_role = $2',
+      [normalizedEmail, userRole]
     );
 
     if (result.rows.length === 0) {
-      return res.status(401).json({ message: 'Invalid email or password.' });
+      return res.status(401).json({ message: 'Invalid email, password, or account type.' });
     }
 
     const user = result.rows[0];
@@ -119,6 +233,7 @@ app.post('/api/auth/login', async (req, res) => {
         user_id: user.user_id,
         full_name: user.full_name,
         email: user.email,
+        user_role: user.user_role,
       },
     });
   } catch (err) {
@@ -151,6 +266,23 @@ app.get('/api/providers/:id', async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
+  }
+});
+
+// Test endpoint: Check database contents
+app.get('/api/test-db', async (req, res) => {
+  try {
+    const usersResult = await pool.query('SELECT * FROM app_users');
+    const providersResult = await pool.query('SELECT * FROM service_provider');
+    
+    res.json({
+      app_users_count: usersResult.rows.length,
+      users: usersResult.rows,
+      service_provider_count: providersResult.rows.length,
+      providers: providersResult.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
