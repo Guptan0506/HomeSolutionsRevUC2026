@@ -98,12 +98,15 @@ const initializeServiceProviderTable = async () => {
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_email VARCHAR(255)`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_phone VARCHAR(20)`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_location VARCHAR(255)`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_services TEXT`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_base_price_per_hr DECIMAL(10, 2)`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS specialization VARCHAR(255)`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS hourly_charge DECIMAL(10, 2)`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS experience_years INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS services TEXT`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS profile_picture_url TEXT`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await pool.query(`ALTER TABLE service_provider ALTER COLUMN sp_services DROP NOT NULL`);
 
     console.log('Service Provider table ready.');
   } catch (err) {
@@ -164,6 +167,25 @@ const initializeServiceRequestsTable = async () => {
     await pool.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS customer_rating INTEGER`);
     await pool.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`);
 
+    // Legacy databases may have FKs targeting old tables; drop blocking constraints for compatibility.
+    await pool.query(`ALTER TABLE service_requests DROP CONSTRAINT IF EXISTS service_requests_user_id_fkey`);
+    await pool.query(`ALTER TABLE service_requests DROP CONSTRAINT IF EXISTS service_requests_sp_id_fkey`);
+
+    await pool.query(`ALTER TABLE service_requests DROP CONSTRAINT IF EXISTS service_requests_status_check`);
+    await pool.query(`ALTER TABLE service_requests DROP CONSTRAINT IF EXISTS service_requests_urgency_check`);
+
+    await pool.query(`
+      ALTER TABLE service_requests
+      ADD CONSTRAINT service_requests_status_check
+      CHECK (status IN ('pending', 'accepted', 'in_progress', 'rejected', 'completed'))
+    `);
+
+    await pool.query(`
+      ALTER TABLE service_requests
+      ADD CONSTRAINT service_requests_urgency_check
+      CHECK (LOWER(urgency) IN ('low', 'medium', 'high', 'urgent', 'important', 'anytime'))
+    `);
+
     console.log('Service requests table ready.');
   } catch (err) {
     console.error('Failed to initialize service requests table:', err.message || err);
@@ -209,6 +231,9 @@ const initializeInvoicesTable = async () => {
     await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission DECIMAL(12, 2) DEFAULT 0`);
     await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS total_amount DECIMAL(12, 2) DEFAULT 0`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS invoices_request_id_unique_idx ON invoices (request_id)`);
+
+    await pool.query(`ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_user_id_fkey`);
+    await pool.query(`ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_sp_id_fkey`);
 
     console.log('Invoices table ready.');
   } catch (err) {
@@ -280,8 +305,12 @@ app.post('/api/auth/signup', async (req, res) => {
     if (userRole === 'service_provider') {
       try {
         await pool.query(
-          `INSERT INTO service_provider (user_id, sp_name, sp_email, sp_phone, sp_location, specialization, hourly_charge, experience_years, services, profile_picture_url)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          `INSERT INTO service_provider (
+             user_id, sp_name, sp_email, sp_phone, sp_location,
+             specialization, hourly_charge, experience_years, services,
+             sp_services, sp_base_price_per_hr, profile_picture_url
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
           [
             user.user_id,
             fullName.trim(),
@@ -292,12 +321,38 @@ app.post('/api/auth/signup', async (req, res) => {
             parseFloat(hourlyCharge),
             Number(experienceYears || 0),
             services || specialization || '',
+            services || specialization || '',
+            parseFloat(hourlyCharge),
             profilePictureUrl || null,
           ]
         );
       } catch (spErr) {
-        console.error('Error creating service provider profile:', spErr.message);
-        // Profile creation failure doesn't prevent user creation
+        // Legacy schemas may reject user_id foreign key values; fallback to email-based provider row.
+        try {
+          await pool.query(
+            `INSERT INTO service_provider (
+               sp_name, sp_email, sp_phone, sp_location,
+               specialization, hourly_charge, experience_years, services,
+               sp_services, sp_base_price_per_hr, profile_picture_url
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [
+              fullName.trim(),
+              normalizedEmail,
+              '',
+              '',
+              specialization || '',
+              parseFloat(hourlyCharge),
+              Number(experienceYears || 0),
+              services || specialization || '',
+              services || specialization || '',
+              parseFloat(hourlyCharge),
+              profilePictureUrl || null,
+            ]
+          );
+        } catch (fallbackErr) {
+          console.error('Error creating service provider profile:', fallbackErr.message || spErr.message);
+        }
       }
     }
 
@@ -342,7 +397,9 @@ app.post('/api/auth/login', async (req, res) => {
          sp.hourly_charge,
          sp.profile_picture_url
        FROM app_users u
-       LEFT JOIN service_provider sp ON sp.user_id = u.user_id
+       LEFT JOIN service_provider sp
+         ON sp.user_id = u.user_id
+         OR LOWER(COALESCE(sp.sp_email, '')) = LOWER(u.email)
        WHERE u.email = $1 AND u.user_role = $2`,
       [normalizedEmail, userRole]
     );
@@ -411,9 +468,24 @@ app.get('/api/providers/:id', async (req, res) => {
 app.get('/api/providers/by-user/:user_id', async (req, res) => {
   try {
     const { user_id } = req.params;
-    const result = await pool.query(
-      'SELECT * FROM service_provider WHERE user_id = $1',
+    const userResult = await pool.query(
+      'SELECT email FROM app_users WHERE user_id = $1',
       [user_id]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const userEmail = userResult.rows[0].email;
+
+    const result = await pool.query(
+      `SELECT *
+       FROM service_provider
+       WHERE user_id = $1 OR LOWER(COALESCE(sp_email, '')) = LOWER($2)
+       ORDER BY sp_id DESC
+       LIMIT 1`,
+      [user_id, userEmail]
     );
 
     if (result.rows.length === 0) {
@@ -492,8 +564,12 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
 
     if ((user_role || userResult.rows[0].user_role) === 'service_provider') {
       await pool.query(
-        `INSERT INTO service_provider (user_id, sp_name, sp_email, sp_phone, sp_location, specialization, hourly_charge, experience_years, profile_picture_url)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO service_provider (
+           user_id, sp_name, sp_email, sp_phone, sp_location,
+           specialization, hourly_charge, experience_years, profile_picture_url,
+           services, sp_services, sp_base_price_per_hr
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (user_id)
          DO UPDATE SET
            sp_name = EXCLUDED.sp_name,
@@ -503,6 +579,9 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
            specialization = EXCLUDED.specialization,
            hourly_charge = EXCLUDED.hourly_charge,
            experience_years = EXCLUDED.experience_years,
+           services = EXCLUDED.services,
+           sp_services = EXCLUDED.sp_services,
+           sp_base_price_per_hr = EXCLUDED.sp_base_price_per_hr,
            profile_picture_url = EXCLUDED.profile_picture_url`,
         [
           Number(user_id),
@@ -514,6 +593,9 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
           Number(base_rate || 0),
           Number(experience_years || 0),
           profile_photo || null,
+          specialization || null,
+          specialization || null,
+          Number(base_rate || 0),
         ]
       );
     }
@@ -541,6 +623,11 @@ const toMoney = (value) => Number(Number(value || 0).toFixed(2));
 app.post('/api/requests', async (req, res) => {
   try {
     const { user_id, sp_id, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude } = req.body;
+    const normalizedUrgency = String(urgency || 'low').trim().toLowerCase();
+
+    const safeUrgency = ['low', 'medium', 'high'].includes(normalizedUrgency)
+      ? normalizedUrgency
+      : 'low';
 
     if (!user_id || !sp_id || !service_name) {
       return res.status(400).json({ message: 'user_id, sp_id, and service_name are required.' });
@@ -550,7 +637,7 @@ app.post('/api/requests', async (req, res) => {
       `INSERT INTO service_requests 
       (user_id, sp_id, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude, status) 
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending') RETURNING *`,
-      [user_id, sp_id, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude]
+      [user_id, sp_id, service_name, date_required, safeUrgency, description, attachment_url, work_address, work_latitude, work_longitude]
     );
     res.json(newRequest.rows[0]);
   } catch (err) {
@@ -765,6 +852,10 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
 
       const source = requestLookup.rows[0];
       const requestDate = source.submitted_at ? new Date(source.submitted_at) : new Date();
+      const requestDateOnly = requestDate.toISOString().slice(0, 10);
+      const requestTimeOnly = requestDate.toTimeString().slice(0, 8);
+      const completedDateOnly = completedAt.toISOString().slice(0, 10);
+      const completedTimeOnly = completedAt.toTimeString().slice(0, 8);
 
       await pool.query(
         `INSERT INTO invoices (
@@ -790,10 +881,10 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
           Number(id),
           source.user_id,
           source.sp_id,
-          requestDate,
-          requestDate,
-          completedAt,
-          completedAt,
+          requestDateOnly,
+          requestTimeOnly,
+          completedDateOnly,
+          completedTimeOnly,
           baseRate,
           workedHours,
           toMoney(baseRate * workedHours),

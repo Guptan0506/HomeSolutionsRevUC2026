@@ -230,7 +230,7 @@ function App() {
   }, [currentScreen, isMarqueePaused]);
 
   const goToRequestForm = () => {
-    setCurrentScreen('form');
+    setCurrentScreen('providers');
   };
 
   const goToProviderSelection = (serviceName) => {
