@@ -374,17 +374,17 @@ body {
 }
 
 .pro-marquee-item {
-  width: 290px;
+  width: 315px;
   flex: 0 0 auto;
   border: 1px solid #e2e8f0;
   background: #fff;
   border-radius: 12px;
-  padding: 14px;
+  padding: 16px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .pro-marquee-name {
-  font-size: 15px;
+  font-size: 16.5px;
   font-weight: 700;
   color: #1a2332;
 }
@@ -392,20 +392,20 @@ body {
 .pro-marquee-role {
   margin-top: 3px;
   color: var(--accent-ocean);
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
 .pro-marquee-meta {
   margin-top: 8px;
   color: var(--ink-500);
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .pro-marquee-review {
   margin-top: 10px;
   color: var(--ink-700);
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.55;
   font-style: italic;
 }
