@@ -7,10 +7,10 @@ const app = express();
 const PORT = 5000;
 
 // Middleware
-app.use(cors()); // Allows React to connect
-app.use(express.json()); // Allows the server to read JSON from your React forms
+app.use(cors());
+app.use(express.json());
 
-// 1. PostgreSQL Connection Configuration
+// PostgreSQL Connection
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
@@ -19,10 +19,21 @@ const pool = new Pool({
   port: process.env.DB_PORT,
 });
 
-// 2. API Route: Get all service_provider (for your 'service_provider' screen)
-app.get('/api/service_provider', async (req, res) => {
+// Test database connection
+pool.connect((err) => {
+  if (err) {
+    console.error('Database connection failed:', err.message);
+  } else {
+    console.log('Connected to HomeServices database!');
+  }
+});
+
+// GET all service providers
+app.get('/api/providers', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM service_provider ORDER BY full_name ASC');
+    const result = await pool.query(
+      'SELECT * FROM service_provider ORDER BY sp_name ASC'
+    );
     res.json(result.rows);
   } catch (err) {
     console.error(err.message);
@@ -30,13 +41,42 @@ app.get('/api/service_provider', async (req, res) => {
   }
 });
 
-// 3. API Route: Submit a new Service Request (from your 'Form' screen)
+// GET single service provider by ID
+app.get('/api/providers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM service_provider WHERE sp_id = $1', [id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// GET all users
+app.get('/api/users', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM users ORDER BY user_name ASC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// POST submit a new service request
 app.post('/api/requests', async (req, res) => {
   try {
-    const { user_id, sp_id, description, urgency, address } = req.body;
+    const { user_id, sp_id, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude } = req.body;
     const newRequest = await pool.query(
-      'INSERT INTO service_requests (user_id, provider_id, description, urgency, address, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [user_id, sp_id, description, urgency, address, 'Pending']
+      `INSERT INTO service_requests 
+      (user_id, sp_id, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude, status) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending') RETURNING *`,
+      [user_id, sp_id, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude]
     );
     res.json(newRequest.rows[0]);
   } catch (err) {
@@ -45,6 +85,133 @@ app.post('/api/requests', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+// GET all requests for a specific user
+app.get('/api/requests/user/:user_id', async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM service_requests WHERE user_id = $1 ORDER BY submitted_at DESC', [user_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
 });
+
+// GET all requests for a specific service provider
+app.get('/api/requests/provider/:sp_id', async (req, res) => {
+  try {
+    const { sp_id } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM service_requests WHERE sp_id = $1 ORDER BY submitted_at DESC', [sp_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// POST provider accepts or rejects a request
+app.post('/api/requests/:id/respond', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sp_id, decision, estimated_time, materials_needed, materials_notes } = req.body;
+    
+    // Save the response
+    const response = await pool.query(
+      `INSERT INTO request_response 
+      (request_id, sp_id, decision, estimated_time, materials_needed, materials_notes) 
+      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [id, sp_id, decision, estimated_time, materials_needed, materials_notes]
+    );
+
+    // Update status on the request
+    await pool.query(
+      'UPDATE service_requests SET status = $1 WHERE request_id = $2',
+      [decision, id]
+    );
+
+    res.json(response.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// POST send a message
+app.post('/api/messages', async (req, res) => {
+  try {
+    const { request_id, sender_id, sender_type, message_text } = req.body;
+    const message = await pool.query(
+      `INSERT INTO messages (request_id, sender_id, sender_type, message_text) 
+      VALUES ($1, $2, $3, $4) RETURNING *`,
+      [request_id, sender_id, sender_type, message_text]
+    );
+    res.json(message.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// GET all messages for a request
+app.get('/api/messages/:request_id', async (req, res) => {
+  try {
+    const { request_id } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM messages WHERE request_id = $1 ORDER BY sent_at ASC', [request_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// POST generate invoice
+app.post('/api/invoices', async (req, res) => {
+  try {
+    const { request_id, user_id, sp_id, service_name, description, base_amount, urgency_charge, extra_charges, service_tax } = req.body;
+    const total = parseFloat(base_amount) + parseFloat(urgency_charge) + parseFloat(extra_charges) + parseFloat(service_tax);
+    const commission = total * 0.15;
+
+    const invoice = await pool.query(
+      `INSERT INTO invoices 
+      (request_id, user_id, sp_id, service_name, description, base_amount, urgency_charge, extra_charges, service_tax, commission, total_amount) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [request_id, user_id, sp_id, service_name, description, base_amount, urgency_charge, extra_charges, service_tax, commission, total]
+    );
+
+    // Mark request as completed
+    await pool.query(
+      'UPDATE service_requests SET status = $1 WHERE request_id = $2',
+      ['completed', request_id]
+    );
+
+    res.json(invoice.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// GET invoice by request ID
+app.get('/api/invoices/:request_id', async (req, res) => {
+  try {
+    const { request_id } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM invoices WHERE request_id = $1', [request_id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
+
