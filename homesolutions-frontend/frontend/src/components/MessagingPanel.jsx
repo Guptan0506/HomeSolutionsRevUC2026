@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { buildApiUrl, getApiErrorMessage, readJsonSafely } from '../api';
 
-function MessagingPanel({ requestId, currentUser, otherPartyName, onClose }) {
+function MessagingPanel({ requestId, otherPartyId, currentUser, otherPartyName, onClose }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -83,23 +83,19 @@ function MessagingPanel({ requestId, currentUser, otherPartyName, onClose }) {
       let recipientId = null;
 
       if (lastMessage) {
-        // If the last message is from the current user, reply to sender
+        // If the last message is from the current user, reply to recipient
         if (lastMessage.sender_id === currentUser.user_id) {
-          // This message was sent by us, so we need to find who we're talking to
-          // For now, assume the other party's user_id is the one from the request
           recipientId = lastMessage.recipient_id;
         } else {
           // Last message is from the other party
           recipientId = lastMessage.sender_id;
         }
+      } else if (otherPartyId) {
+        // No messages yet, use the otherPartyId prop
+        recipientId = otherPartyId;
       }
 
-      // If we couldn't find recipient from messages, we need to figure it out
-      // This requires fetching the request to know the other party
       if (!recipientId) {
-        // For now, we'll try to make an educated guess based on user role
-        // In a real app, we'd pass this as a prop or fetch the request
-        // Let's assume it's passed via props or we determine it from context
         setError('Unable to determine recipient. Please refresh.');
         setSending(false);
         return;

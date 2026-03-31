@@ -61,6 +61,7 @@ function ServiceProviderProfilePage({
   const [extraMaterialsCost, setExtraMaterialsCost] = useState('');
   const [extraFee, setExtraFee] = useState('');
   const [messagingRequestId, setMessagingRequestId] = useState(null);
+  const [messagingCustomerId, setMessagingCustomerId] = useState(null);
   const [messagingCustomerName, setMessagingCustomerName] = useState('');
 
   // Fetch unread message counts
@@ -378,6 +379,7 @@ function ServiceProviderProfilePage({
                 className="btn-s"
                 onClick={() => {
                   setMessagingRequestId(request.requestId);
+                  setMessagingCustomerId(request.customerId);
                   setMessagingCustomerName(request.customerName);
                 }}
                 style={{ marginRight: '8px', position: 'relative' }}
@@ -593,10 +595,12 @@ function ServiceProviderProfilePage({
           <div style={{ width: '100%', height: '100%' }}>
             <MessagingPanel
               requestId={messagingRequestId}
+              otherPartyId={messagingCustomerId}
               currentUser={currentUser}
               otherPartyName={messagingCustomerName}
               onClose={() => {
                 setMessagingRequestId(null);
+                setMessagingCustomerId(null);
                 setMessagingCustomerName('');
               }}
             />

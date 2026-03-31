@@ -41,6 +41,7 @@ function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onReq
   const [profilePhoto, setProfilePhoto] = useState(currentUser.profile_photo || '');
   const [fullName, setFullName] = useState(currentUser.full_name || '');
   const [messagingRequestId, setMessagingRequestId] = useState(null);
+  const [messagingProviderId, setMessagingProviderId] = useState(null);
   const [messagingProviderName, setMessagingProviderName] = useState('');
   const [email, setEmail] = useState(currentUser.email || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
@@ -231,6 +232,7 @@ function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onReq
                 style={{ marginTop: '12px', width: '100%', position: 'relative' }}
                 onClick={() => {
                   setMessagingRequestId(request.requestId);
+                  setMessagingProviderId(request.providerId);
                   setMessagingProviderName(request.providerName);
                 }}
               >
@@ -261,10 +263,12 @@ function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onReq
           <div style={{ width: '100%', height: '100%' }}>
             <MessagingPanel
               requestId={messagingRequestId}
+              otherPartyId={messagingProviderId}
               currentUser={currentUser}
               otherPartyName={messagingProviderName}
               onClose={() => {
                 setMessagingRequestId(null);
+                setMessagingProviderId(null);
                 setMessagingProviderName('');
               }}
             />

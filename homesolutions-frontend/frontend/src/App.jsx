@@ -78,6 +78,7 @@ function getStoredUser() {
 function mapCustomerRequest(row) {
   return {
     requestId: row.request_id,
+    providerId: row.sp_id || null,
     dateRequested: row.date_required || row.submitted_at,
     providerName: row.provider_name || 'Assigned Provider Pending',
     status: row.status,
@@ -92,6 +93,7 @@ function mapCustomerRequest(row) {
 function mapProviderRequest(row) {
   return {
     requestId: row.request_id,
+    customerId: row.user_id || null,
     customerName: row.customer_name || 'Customer',
     customerPhoto: row.customer_photo || '',
     contact: row.customer_phone || row.customer_email || 'N/A',
