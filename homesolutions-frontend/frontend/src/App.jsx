@@ -12,6 +12,7 @@ import ServiceProviderProfilePage from "./components/ServiceProviderProfilePage"
 import ServiceInvoicePage from "./components/ServiceInvoicePage";
 import TroubleshootChatbot from "./components/TroubleshootChatbot";
 import Toast from "./components/Toast";
+import AdminDashboardPage from "./components/AdminDashboardPage";
 import { buildApiUrl, getApiErrorMessage, readJsonSafely, setAuthToken, clearAuthToken, getAuthToken } from "./api";
 
 const featuredProfessionals = [
@@ -561,6 +562,11 @@ function App() {
                 </>
               ) : (
                 <>
+                  {currentUser?.user_id === 1 && (
+                    <button className="btn-s nav-auth-btn admin-btn" onClick={() => setCurrentScreen('admin')}>
+                      Admin Dashboard
+                    </button>
+                  )}
                   <button className="btn-s nav-auth-btn" onClick={() => setCurrentScreen('profile')}>Profile</button>
                   <button className="btn-s btn-logout nav-auth-btn" onClick={handleLogout}>Log Out</button>
                 </>
@@ -815,6 +821,13 @@ function App() {
                 />
                 {renderSharedFooter()}
               </>
+            )}
+
+            {currentScreen === 'admin' && currentUser?.user_id === 1 && (
+              <AdminDashboardPage
+                onLogout={handleLogout}
+                currentUser={currentUser}
+              />
             )}
           </div>
         </div>

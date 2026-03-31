@@ -1587,6 +1587,200 @@ app.post('/api/chat/troubleshoot', async (req, res) => {
   }
 });
 
+// ============================================================================
+// Phase 5: ADMIN DASHBOARD ENDPOINTS
+// ============================================================================
+
+// Middleware to verify admin access (user_id === 1 for now)
+const requireAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  
+  if (req.user.user_id !== 1) {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+  
+  next();
+};
+
+// GET /api/admin/stats - Platform overview statistics
+app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    // Get overall stats
+    const statsQuery = `
+      SELECT
+        (SELECT COUNT(*) FROM app_users WHERE user_role = 'customer') as total_customers,
+        (SELECT COUNT(*) FROM service_provider) as total_providers,
+        (SELECT COUNT(*) FROM service_requests WHERE status IN ('pending', 'in_progress')) as active_requests,
+        (SELECT COUNT(*) FROM service_requests WHERE status = 'completed') as completed_requests,
+        (SELECT COUNT(*) FROM service_requests) as total_requests,
+        (SELECT COUNT(*) FROM service_requests WHERE status = 'pending') as pending_requests,
+        (SELECT COUNT(*) FROM service_requests WHERE status = 'in_progress') as in_progress_requests,
+        (SELECT COUNT(*) FROM service_requests WHERE status = 'rejected') as rejected_requests,
+        (SELECT AVG(CAST(rating as NUMERIC)) FROM service_provider WHERE rating IS NOT NULL) as avg_provider_rating
+    `;
+
+    const result = await pool.query(statsQuery);
+    const stats = result.rows[0];
+
+    return res.json({
+      total_customers: parseInt(stats.total_customers) || 0,
+      total_providers: parseInt(stats.total_providers) || 0,
+      active_requests: parseInt(stats.active_requests) || 0,
+      completed_requests: parseInt(stats.completed_requests) || 0,
+      total_requests: parseInt(stats.total_requests) || 0,
+      pending_requests: parseInt(stats.pending_requests) || 0,
+      in_progress_requests: parseInt(stats.in_progress_requests) || 0,
+      rejected_requests: parseInt(stats.rejected_requests) || 0,
+      avg_provider_rating: parseFloat(stats.avg_provider_rating) || 0,
+    });
+  } catch (err) {
+    console.error('Admin stats error:', err);
+    return res.status(500).json({ message: 'Unable to fetch admin statistics' });
+  }
+});
+
+// GET /api/admin/users - List of customers
+app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const query = `
+      SELECT
+        u.user_id,
+        u.full_name,
+        u.email,
+        u.phone,
+        u.location,
+        COUNT(sr.request_id) as request_count
+      FROM app_users u
+      LEFT JOIN service_requests sr ON u.user_id = sr.customer_id
+      WHERE u.user_role = 'customer'
+      GROUP BY u.user_id, u.full_name, u.email, u.phone, u.location
+      ORDER BY u.user_id DESC
+      LIMIT 100
+    `;
+
+    const result = await pool.query(query);
+    return res.json(result.rows);
+  } catch (err) {
+    console.error('Admin users error:', err);
+    return res.status(500).json({ message: 'Unable to fetch users' });
+  }
+});
+
+// GET /api/admin/providers - List of service providers
+app.get('/api/admin/providers', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const query = `
+      SELECT
+        sp.sp_id,
+        sp.sp_name,
+        sp.specialization,
+        sp.rating as avg_rating,
+        sp.hourly_charge,
+        sp.availability,
+        COUNT(sr.request_id) as completed_requests
+      FROM service_provider sp
+      LEFT JOIN service_requests sr ON sp.sp_id = sr.sp_id AND sr.status = 'completed'
+      GROUP BY sp.sp_id, sp.sp_name, sp.specialization, sp.rating, sp.hourly_charge, sp.availability
+      ORDER BY sp.sp_id DESC
+      LIMIT 100
+    `;
+
+    const result = await pool.query(query);
+    return res.json(result.rows || []);
+  } catch (err) {
+    console.error('Admin providers error:', err);
+    return res.status(500).json({ message: 'Unable to fetch providers' });
+  }
+});
+
+// GET /api/admin/requests - List of all service requests
+app.get('/api/admin/requests', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const query = `
+      SELECT
+        sr.request_id,
+        sr.service_name,
+        u.full_name as customer_name,
+        sp.sp_name as provider_name,
+        sr.status,
+        (SELECT SUM(invoice_amount) FROM invoices WHERE request_id = sr.request_id) as total_amount,
+        sr.submitted_at
+      FROM service_requests sr
+      LEFT JOIN app_users u ON sr.customer_id = u.user_id
+      LEFT JOIN service_provider sp ON sr.sp_id = sp.sp_id
+      ORDER BY sr.submitted_at DESC
+      LIMIT 100
+    `;
+
+    const result = await pool.query(query);
+    return res.json(result.rows || []);
+  } catch (err) {
+    console.error('Admin requests error:', err);
+    return res.status(500).json({ message: 'Unable to fetch requests' });
+  }
+});
+
+// GET /api/admin/revenue - Revenue and payment analytics
+app.get('/api/admin/revenue', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const totalQuery = `
+      SELECT
+        SUM(invoice_amount) as total_revenue,
+        COUNT(*) as completed_invoices,
+        AVG(invoice_amount) as avg_transaction
+      FROM invoices
+    `;
+
+    const commissionQuery = `
+      SELECT
+        SUM(invoice_amount * 0.05) as total_commission,
+        SUM(invoice_amount * 0.95) as total_payouts
+      FROM invoices
+    `;
+
+    const serviceQuery = `
+      SELECT
+        sr.service_name,
+        SUM(i.invoice_amount) as revenue
+      FROM invoices i
+      LEFT JOIN service_requests sr ON i.request_id = sr.request_id
+      WHERE sr.service_name IS NOT NULL
+      GROUP BY sr.service_name
+      ORDER BY revenue DESC
+    `;
+
+    const [totalResult, commissionResult, serviceResult] = await Promise.all([
+      pool.query(totalQuery),
+      pool.query(commissionQuery),
+      pool.query(serviceQuery),
+    ]);
+
+    const totalData = totalResult.rows[0] || {};
+    const commissionData = commissionResult.rows[0] || {};
+    const serviceData = serviceResult.rows || [];
+
+    // Build response
+    const byService = {};
+    serviceData.forEach((row) => {
+      byService[row.service_name] = parseFloat(row.revenue) || 0;
+    });
+
+    return res.json({
+      total_revenue: parseFloat(totalData.total_revenue) || 0,
+      completed_invoices: parseInt(totalData.completed_invoices) || 0,
+      avg_transaction: parseFloat(totalData.avg_transaction) || 0,
+      total_commission: parseFloat(commissionData.total_commission) || 0,
+      total_payouts: parseFloat(commissionData.total_payouts) || 0,
+      by_service: byService,
+    });
+  } catch (err) {
+    console.error('Admin revenue error:', err);
+    return res.status(500).json({ message: 'Unable to fetch revenue data' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
