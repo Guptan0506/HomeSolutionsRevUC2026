@@ -16,5 +16,10 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      rollupOptions: {
+        external: ['@stripe/js'],
+      },
+    },
   };
 })

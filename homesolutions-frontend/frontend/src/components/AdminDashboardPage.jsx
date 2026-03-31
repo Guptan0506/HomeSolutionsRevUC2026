@@ -15,9 +15,13 @@ function AdminDashboardPage({ onLogout, currentUser }) {
   const [requests, setRequests] = useState([]);
   const [revenue, setRevenue] = useState(null);
   const [moderationLogs, setModerationLogs] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [paymentSummary, setPaymentSummary] = useState(null);
+  const [pendingPayouts, setPendingPayouts] = useState([]);
   
   // Modal state
   const [actionModal, setActionModal] = useState(null); // { type, userId, providerId, action }
+  const [payoutLoading, setPayoutLoading] = useState(false);
   const [actionReason, setActionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -30,7 +34,7 @@ function AdminDashboardPage({ onLogout, currentUser }) {
     setError('');
 
     try {
-      const [statsRes, usersRes, providersRes, requestsRes, revenueRes, logsRes] = await Promise.all([
+      const [statsRes, usersRes, providersRes, requestsRes, revenueRes, logsRes, paymentsRes, payoutsRes] = await Promise.all([
         fetch(buildApiUrl('/api/admin/stats'), {
           headers: getAuthHeaders(),
         }),
@@ -47,6 +51,12 @@ function AdminDashboardPage({ onLogout, currentUser }) {
           headers: getAuthHeaders(),
         }),
         fetch(buildApiUrl('/api/admin/moderation-logs'), {
+          headers: getAuthHeaders(),
+        }),
+        fetch(buildApiUrl('/api/admin/payments'), {
+          headers: getAuthHeaders(),
+        }),
+        fetch(buildApiUrl('/api/admin/pending-payouts'), {
           headers: getAuthHeaders(),
         }),
       ]);
@@ -81,6 +91,17 @@ function AdminDashboardPage({ onLogout, currentUser }) {
       if (logsRes.ok) {
         const logsData = await readJsonSafely(logsRes);
         setModerationLogs(Array.isArray(logsData) ? logsData : []);
+      }
+
+      if (paymentsRes.ok) {
+        const paymentsData = await readJsonSafely(paymentsRes);
+        setPayments(Array.isArray(paymentsData.transactions) ? paymentsData.transactions : []);
+        setPaymentSummary(paymentsData.summary);
+      }
+
+      if (payoutsRes.ok) {
+        const payoutsData = await readJsonSafely(payoutsRes);
+        setPendingPayouts(Array.isArray(payoutsData) ? payoutsData : []);
       }
     } catch (err) {
       setError(err.message || 'Unable to load admin data');
@@ -122,6 +143,32 @@ function AdminDashboardPage({ onLogout, currentUser }) {
       setError(err.message || 'Action failed');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleProcessPayout = async (invoiceId) => {
+    setPayoutLoading(true);
+    try {
+      const response = await fetch(buildApiUrl('/api/admin/process-payout'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ invoiceId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await readJsonSafely(response);
+        throw new Error(errorData.message || 'Failed to process payout');
+      }
+
+      setError('');
+      await fetchAdminData();
+    } catch (err) {
+      setError(err.message || 'Payout processing failed');
+    } finally {
+      setPayoutLoading(false);
     }
   };
 
@@ -183,6 +230,12 @@ function AdminDashboardPage({ onLogout, currentUser }) {
           onClick={() => setActiveTab('moderation')}
         >
           Moderation
+        </button>
+        <button
+          className={`admin-nav-btn ${activeTab === 'payments' ? 'active' : ''}`}
+          onClick={() => setActiveTab('payments')}
+        >
+          Payments
         </button>
       </div>
 
@@ -624,6 +677,134 @@ function AdminDashboardPage({ onLogout, currentUser }) {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'payments' && (
+          <div className="payments-tab-content">
+            <h2>Payment Management</h2>
+            
+            {/* Payment Summary */}
+            {paymentSummary && (
+              <div className="payments-summary">
+                <div className="summary-card">
+                  <div className="summary-label">Total Revenue</div>
+                  <div className="summary-value">{formatCurrency(paymentSummary.totalRevenue)}</div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-label">Total Commissions</div>
+                  <div className="summary-value">{formatCurrency(paymentSummary.totalCommissions)}</div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-label">Completed Payments</div>
+                  <div className="summary-value">{paymentSummary.completedPayments}</div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-label">Pending Payouts</div>
+                  <div className="summary-value" style={{ color: '#d97706' }}>{pendingPayouts.length}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Pending Payouts Section */}
+            {pendingPayouts.length > 0 && (
+              <div className="admin-table-section" style={{ marginTop: '24px' }}>
+                <h3>Pending Provider Payouts</h3>
+                <div className="admin-table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Provider</th>
+                        <th>Customer</th>
+                        <th>Invoice ID</th>
+                        <th>Total Amount</th>
+                        <th>Payout Amount</th>
+                        <th>Payment Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingPayouts.slice(0, 50).map((payout) => (
+                        <tr key={payout.invoice_id}>
+                          <td><strong>{payout.business_name}</strong></td>
+                          <td>{payout.customer_name || 'Unknown'}</td>
+                          <td>#{payout.invoice_id}</td>
+                          <td>{formatCurrency(payout.total_amount)}</td>
+                          <td style={{ fontWeight: '600', color: '#2ecc71' }}>
+                            {formatCurrency(payout.provider_payout_amount)}
+                          </td>
+                          <td>
+                            <span className="payment-status-badge completed">
+                              {payout.payment_status}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              className="btn-s"
+                              onClick={() => handleProcessPayout(payout.invoice_id)}
+                              disabled={payoutLoading}
+                            >
+                              {payoutLoading ? 'Processing...' : 'Process'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* All Transactions */}
+            <div className="admin-table-section" style={{ marginTop: '24px' }}>
+              <h3>Payment Transactions</h3>
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice ID</th>
+                      <th>Customer</th>
+                      <th>Provider</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Payout Status</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.length > 0 ? (
+                      payments.slice(0, 100).map((payment) => (
+                        <tr key={payment.invoice_id}>
+                          <td>#{payment.invoice_id}</td>
+                          <td>{payment.customer_name || 'Unknown'}</td>
+                          <td>{payment.provider_name || 'Unknown'}</td>
+                          <td>{formatCurrency(payment.total_amount)}</td>
+                          <td>
+                            <span className={`payment-status-badge ${payment.payment_status}`}>
+                              {payment.payment_status}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`payout-status-badge ${payment.payout_status}`}>
+                              {payment.payout_status}
+                            </span>
+                          </td>
+                          <td>
+                            {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString() : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="7" className="empty-message">
+                          No payment transactions yet
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

@@ -21,6 +21,7 @@ const {
   isValidEmail,
 } = require('./securityUtils');
 const { createRateLimiter } = require('./rateLimiter');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || '');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
@@ -290,10 +291,27 @@ const initializeInvoicesTable = async () => {
         tax DECIMAL(12, 2) DEFAULT 0,
         commission DECIMAL(12, 2) DEFAULT 0,
         total_amount DECIMAL(12, 2) DEFAULT 0,
+        payment_status TEXT DEFAULT 'pending',
+        stripe_payment_intent_id TEXT,
+        stripe_charge_id TEXT,
+        paid_at TIMESTAMP,
+        payout_status TEXT DEFAULT 'pending',
+        payout_date TIMESTAMP,
+        provider_payout_amount DECIMAL(12, 2) DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
+    // Add payment-related columns if they don't exist
+    await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'pending'`);
+    await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_payment_intent_id TEXT`);
+    await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_charge_id TEXT`);
+    await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payout_status TEXT DEFAULT 'pending'`);
+    await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payout_date TIMESTAMP`);
+    await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS provider_payout_amount DECIMAL(12, 2) DEFAULT 0`);
+    
+    // Existing columns
     await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS request_date DATE`);
     await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS request_time TIME`);
     await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS completion_date DATE`);
@@ -307,12 +325,17 @@ const initializeInvoicesTable = async () => {
     await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax DECIMAL(12, 2) DEFAULT 0`);
     await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission DECIMAL(12, 2) DEFAULT 0`);
     await pool.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS total_amount DECIMAL(12, 2) DEFAULT 0`);
+    
+    // Create indexes for payment tracking
+    await pool.query(`CREATE INDEX IF NOT EXISTS invoices_payment_status_idx ON invoices (payment_status)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS invoices_stripe_payment_intent_idx ON invoices (stripe_payment_intent_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS invoices_payout_status_idx ON invoices (payout_status)`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS invoices_request_id_unique_idx ON invoices (request_id)`);
 
     await pool.query(`ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_user_id_fkey`);
     await pool.query(`ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_sp_id_fkey`);
 
-    console.log('Invoices table ready.');
+    console.log('Invoices table ready with payment tracking.');
   } catch (err) {
     console.error('Failed to initialize invoices table:', err.message || err);
   }
@@ -2040,6 +2063,360 @@ app.get('/api/admin/moderation-logs', requireAuth, requireAdmin, async (req, res
   } catch (err) {
     console.error('Admin moderation logs error:', err);
     return res.status(500).json({ message: 'Unable to fetch moderation logs' });
+  }
+});
+
+// ==================== PAYMENT PROCESSING ENDPOINTS ====================
+
+// Create payment intent for invoice
+app.post('/api/invoices/:invoiceId/create-payment-intent', requireAuth, async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const userId = req.user.id;
+
+    // Get invoice details
+    const invoiceResult = await pool.query(
+      'SELECT * FROM invoices WHERE invoice_id = $1',
+      [invoiceId]
+    );
+
+    if (invoiceResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    const invoice = invoiceResult.rows[0];
+
+    // Verify user owns this invoice
+    if (invoice.user_id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Check if already paid
+    if (invoice.payment_status === 'completed') {
+      return res.status(400).json({ message: 'Invoice already paid' });
+    }
+
+    // Create or get existing payment intent
+    let paymentIntentId = invoice.stripe_payment_intent_id;
+    let clientSecret;
+
+    if (!paymentIntentId) {
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(invoice.total_amount * 100), // Stripe uses cents
+        currency: 'usd',
+        description: `Invoice #${invoiceId} - HomeSolutions`,
+        metadata: {
+          invoiceId: invoiceId.toString(),
+          userId: userId.toString(),
+        },
+      });
+
+      paymentIntentId = paymentIntent.id;
+      clientSecret = paymentIntent.client_secret;
+
+      // Update invoice with payment intent ID
+      await pool.query(
+        'UPDATE invoices SET stripe_payment_intent_id = $1 WHERE invoice_id = $2',
+        [paymentIntentId, invoiceId]
+      );
+    } else {
+      // Retrieve existing payment intent to get client secret
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      clientSecret = paymentIntent.client_secret;
+    }
+
+    res.json({
+      clientSecret,
+      paymentIntentId,
+      amount: invoice.total_amount,
+    });
+  } catch (err) {
+    console.error('Create payment intent error:', err);
+    res.status(500).json({ message: 'Failed to create payment intent' });
+  }
+});
+
+// Confirm payment and update invoice status
+app.post('/api/invoices/:invoiceId/confirm-payment', requireAuth, async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const { paymentIntentId } = req.body;
+    const userId = req.user.id;
+
+    // Get invoice details
+    const invoiceResult = await pool.query(
+      'SELECT * FROM invoices WHERE invoice_id = $1',
+      [invoiceId]
+    );
+
+    if (invoiceResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    const invoice = invoiceResult.rows[0];
+
+    // Verify user owns this invoice
+    if (invoice.user_id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Verify payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status === 'succeeded') {
+      // Calculate provider payout (total minus 5% commission)
+      const providerPayoutAmount = invoice.total_amount * 0.95;
+
+      // Update invoice as paid
+      await pool.query(
+        `UPDATE invoices 
+         SET payment_status = $1, 
+             stripe_charge_id = $2,
+             paid_at = CURRENT_TIMESTAMP,
+             provider_payout_amount = $3,
+             payout_status = 'pending'
+         WHERE invoice_id = $4`,
+        ['completed', paymentIntent.charges.data[0].id, providerPayoutAmount, invoiceId]
+      );
+
+      res.json({
+        success: true,
+        message: 'Payment confirmed successfully',
+        paymentStatus: 'completed',
+      });
+    } else {
+      res.status(400).json({ message: 'Payment not completed' });
+    }
+  } catch (err) {
+    console.error('Confirm payment error:', err);
+    res.status(500).json({ message: 'Failed to confirm payment' });
+  }
+});
+
+// Get payment status for invoice
+app.get('/api/invoices/:invoiceId/payment-status', requireAuth, async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      'SELECT invoice_id, payment_status, paid_at, total_amount FROM invoices WHERE invoice_id = $1',
+      [invoiceId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    const invoice = result.rows[0];
+
+    // Verify user owns this invoice
+    const ownerCheck = await pool.query(
+      'SELECT user_id FROM invoices WHERE invoice_id = $1',
+      [invoiceId]
+    );
+
+    if (ownerCheck.rows[0].user_id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    res.json({
+      invoiceId: invoice.invoice_id,
+      paymentStatus: invoice.payment_status,
+      paidAt: invoice.paid_at,
+      amount: invoice.total_amount,
+    });
+  } catch (err) {
+    console.error('Get payment status error:', err);
+    res.status(500).json({ message: 'Failed to get payment status' });
+  }
+});
+
+// Stripe webhook handler
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const sig = req.headers['stripe-signature'];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event;
+
+    if (endpointSecret) {
+      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    } else {
+      event = JSON.parse(req.body);
+    }
+
+    // Handle webhook events
+    if (event.type === 'payment_intent.succeeded') {
+      const paymentIntent = event.data.object;
+      const { invoiceId } = paymentIntent.metadata;
+
+      if (invoiceId) {
+        // Calculate provider payout
+        const invoiceResult = await pool.query(
+          'SELECT total_amount FROM invoices WHERE invoice_id = $1',
+          [invoiceId]
+        );
+
+        if (invoiceResult.rows.length > 0) {
+          const providerPayoutAmount = invoiceResult.rows[0].total_amount * 0.95;
+
+          await pool.query(
+            `UPDATE invoices 
+             SET payment_status = $1, 
+                 stripe_charge_id = $2,
+                 paid_at = CURRENT_TIMESTAMP,
+                 provider_payout_amount = $3,
+                 payout_status = 'pending'
+             WHERE invoice_id = $4`,
+            ['completed', paymentIntent.charges[0].id, providerPayoutAmount, invoiceId]
+          );
+        }
+      }
+    } else if (event.type === 'payment_intent.payment_failed') {
+      const paymentIntent = event.data.object;
+      const { invoiceId } = paymentIntent.metadata;
+
+      if (invoiceId) {
+        await pool.query(
+          'UPDATE invoices SET payment_status = $1 WHERE invoice_id = $2',
+          ['failed', invoiceId]
+        );
+      }
+    }
+
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('Stripe webhook error:', err.message);
+    res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+});
+
+// Admin: Get pending payouts
+app.get('/api/admin/pending-payouts', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        i.invoice_id,
+        i.request_id,
+        i.sp_id,
+        sp.business_name,
+        sp.primary_contact_email,
+        i.total_amount,
+        i.provider_payout_amount,
+        i.payment_status,
+        i.payout_status,
+        i.paid_at,
+        i.payout_date,
+        u.full_name as customer_name
+      FROM invoices i
+      JOIN service_provider sp ON i.sp_id = sp.sp_id
+      LEFT JOIN app_users u ON i.user_id = u.user_id
+      WHERE i.payment_status = 'completed' AND i.payout_status = 'pending'
+      ORDER BY i.paid_at DESC
+      LIMIT 100
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Pending payouts error:', err);
+    res.status(500).json({ message: 'Failed to fetch pending payouts' });
+  }
+});
+
+// Admin: Process payout to provider
+app.post('/api/admin/process-payout', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { invoiceId } = req.body;
+
+    if (!invoiceId) {
+      return res.status(400).json({ message: 'Invoice ID required' });
+    }
+
+    // Get invoice details
+    const invoiceResult = await pool.query(
+      'SELECT * FROM invoices WHERE invoice_id = $1',
+      [invoiceId]
+    );
+
+    if (invoiceResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    const invoice = invoiceResult.rows[0];
+
+    if (invoice.payment_status !== 'completed' || invoice.payout_status !== 'pending') {
+      return res.status(400).json({ message: 'Invoice not eligible for payout' });
+    }
+
+    // Create payout to provider via Stripe (connected account)
+    // For MVP, we'll just mark as processing
+    const result = await pool.query(
+      `UPDATE invoices 
+       SET payout_status = $1, payout_date = CURRENT_TIMESTAMP 
+       WHERE invoice_id = $2
+       RETURNING *`,
+      ['processed', invoiceId]
+    );
+
+    res.json({
+      message: 'Payout processed successfully',
+      invoice: result.rows[0],
+    });
+  } catch (err) {
+    console.error('Process payout error:', err);
+    res.status(500).json({ message: 'Failed to process payout' });
+  }
+});
+
+// Admin: Get payment transactions for dashboard
+app.get('/api/admin/payments', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        i.invoice_id,
+        i.request_id,
+        i.total_amount,
+        i.payment_status,
+        i.paid_at,
+        u.full_name as customer_name,
+        sp.business_name as provider_name,
+        i.provider_payout_amount,
+        i.payout_status
+      FROM invoices i
+      LEFT JOIN app_users u ON i.user_id = u.user_id
+      LEFT JOIN service_provider sp ON i.sp_id = sp.sp_id
+      WHERE i.payment_status IS NOT NULL
+      ORDER BY i.created_at DESC
+      LIMIT 100
+    `);
+
+    // Calculate payment summary
+    const completedResult = await pool.query(
+      `SELECT SUM(total_amount) as total_revenue, 
+              SUM(commission) as total_commissions,
+              COUNT(*) as completed_payments
+       FROM invoices 
+       WHERE payment_status = 'completed'`
+    );
+
+    const summary = completedResult.rows[0] || {
+      total_revenue: 0,
+      total_commissions: 0,
+      completed_payments: 0,
+    };
+
+    res.json({
+      transactions: result.rows,
+      summary: {
+        totalRevenue: summary.total_revenue,
+        totalCommissions: summary.total_commissions,
+        completedPayments: summary.completed_payments,
+      },
+    });
+  } catch (err) {
+    console.error('Admin payments error:', err);
+    res.status(500).json({ message: 'Failed to fetch payments' });
   }
 });
 
