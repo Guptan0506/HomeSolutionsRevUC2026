@@ -352,6 +352,7 @@ app.post('/api/auth/signup', async (req, res) => {
       email, 
       password, 
       userRole,
+      profilePhoto,
       // Service provider fields
       specialization,
       hourlyCharge,
@@ -381,6 +382,10 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedProfilePhoto =
+      typeof profilePhoto === 'string' && profilePhoto.trim()
+        ? profilePhoto.trim()
+        : (typeof profilePictureUrl === 'string' && profilePictureUrl.trim() ? profilePictureUrl.trim() : null);
 
     await client.query('BEGIN');
 
@@ -394,10 +399,10 @@ app.post('/api/auth/signup', async (req, res) => {
     
     // Create user  
     const userResult = await client.query(
-      `INSERT INTO app_users (full_name, email, password_hash, user_role)
-       VALUES ($1, $2, $3, $4)
-       RETURNING user_id, full_name, email, user_role, created_at`,
-      [fullName.trim(), normalizedEmail, passwordHash, userRole]
+      `INSERT INTO app_users (full_name, email, password_hash, user_role, profile_photo)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING user_id, full_name, email, user_role, profile_photo, created_at`,
+      [fullName.trim(), normalizedEmail, passwordHash, userRole, normalizedProfilePhoto]
     );
 
     const user = userResult.rows[0];
@@ -428,7 +433,7 @@ app.post('/api/auth/signup', async (req, res) => {
           parsedHourlyCharge,
           parsedExperienceYears,
           normalizedServices,
-          profilePictureUrl || null,
+          normalizedProfilePhoto,
           normalizedServices,
           parsedHourlyCharge,
         ]
@@ -455,7 +460,7 @@ app.post('/api/auth/signup', async (req, res) => {
               parsedHourlyCharge,
               parsedExperienceYears,
               normalizedServices,
-              profilePictureUrl || null,
+              normalizedProfilePhoto,
               normalizedServices,
               parsedHourlyCharge,
             ]
@@ -485,7 +490,7 @@ app.post('/api/auth/signup', async (req, res) => {
               parsedHourlyCharge,
               parsedExperienceYears,
               normalizedServices,
-              profilePictureUrl || null,
+              normalizedProfilePhoto,
               normalizedServices,
               parsedHourlyCharge,
             ]
@@ -599,7 +604,14 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/providers', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM service_provider ORDER BY sp_name ASC'
+      `SELECT
+         sp.*,
+         COALESCE(NULLIF(sp.profile_picture_url, ''), au.profile_photo) AS provider_photo
+       FROM service_provider sp
+       LEFT JOIN app_users au
+         ON au.user_id = sp.user_id
+         OR LOWER(COALESCE(au.email, '')) = LOWER(COALESCE(sp.sp_email, ''))
+       ORDER BY sp.sp_name ASC`
     );
     res.json(result.rows);
   } catch (err) {
@@ -913,7 +925,8 @@ app.get('/api/requests/provider/:sp_id', requireAuth, async (req, res) => {
          sr.completed_at,
          au.full_name AS customer_name,
          au.email AS customer_email,
-         au.phone AS customer_phone
+         au.phone AS customer_phone,
+         au.profile_photo AS customer_photo
        FROM service_requests sr
        LEFT JOIN app_users au ON au.user_id = sr.user_id
        WHERE sr.sp_id = $1

@@ -91,6 +91,7 @@ function mapProviderRequest(row) {
   return {
     requestId: row.request_id,
     customerName: row.customer_name || 'Customer',
+    customerPhoto: row.customer_photo || '',
     contact: row.customer_phone || row.customer_email || 'N/A',
     requestTitle: row.service_name,
     requestDescription: row.description || '',
@@ -127,6 +128,8 @@ function App() {
   const [serviceProviderRequests, setServiceProviderRequests] = useState([]);
   const [invoiceRequest, setInvoiceRequest] = useState(null);
   const marqueeViewportRef = useRef(null);
+  const servicesSectionRef = useRef(null);
+  const [shouldScrollToServices, setShouldScrollToServices] = useState(false);
 
   const fetchCustomerRequests = async (userId) => {
     try {
@@ -233,12 +236,34 @@ function App() {
     };
   }, [currentScreen, isMarqueePaused]);
 
+  useEffect(() => {
+    if (currentScreen !== 'home' || !shouldScrollToServices) {
+      return;
+    }
+
+    const scrollId = window.setTimeout(() => {
+      servicesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setShouldScrollToServices(false);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(scrollId);
+    };
+  }, [currentScreen, shouldScrollToServices]);
+
   const goToRequestForm = () => {
-    setCurrentScreen('providers');
+    setCurrentScreen('home');
+    setShouldScrollToServices(true);
   };
 
   const goToProviderSelection = (serviceName) => {
     setSelectedService(serviceName || 'General Home Service');
+
+    if (!currentUser) {
+      openAuth('login', 'providers');
+      return;
+    }
+
     setCurrentScreen('providers');
   };
 
@@ -596,7 +621,7 @@ function App() {
                 </div>
               </div>
 
-              <section className="services-section" aria-label="Services">
+              <section className="services-section" aria-label="Services" ref={servicesSectionRef}>
                 <div className="sec-label">Services</div>
                 <div className="services-grid">
                   {serviceCatalog.map((service) => (

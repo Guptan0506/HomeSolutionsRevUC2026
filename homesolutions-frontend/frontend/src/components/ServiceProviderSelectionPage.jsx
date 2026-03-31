@@ -104,13 +104,22 @@ function ServiceProviderSelectionPage({ selectedService, onBookNow }) {
             const providerName = provider.sp_name || provider.full_name || 'Professional';
             const providerService = provider.specialization || provider.service_type || 'General Home Service';
             const providerId = provider.sp_id || provider.id;
+            const providerPhoto = provider.profile_picture_url || provider.provider_photo || provider.profile_photo || '';
+            const providerInitial = (providerName || 'P').trim().charAt(0).toUpperCase();
 
             return (
               <article className="card provider-selection-card" key={providerId}>
                 <div className="provider-selection-head">
-                  <div>
-                    <p className="provider-selection-name">{providerName}</p>
-                    <p className="provider-selection-service">{providerService}</p>
+                  <div className="provider-selection-identity">
+                    {providerPhoto ? (
+                      <img src={providerPhoto} alt={providerName} className="provider-selection-avatar" />
+                    ) : (
+                      <div className="provider-selection-avatar provider-selection-avatar-fallback">{providerInitial}</div>
+                    )}
+                    <div>
+                      <p className="provider-selection-name">{providerName}</p>
+                      <p className="provider-selection-service">{providerService}</p>
+                    </div>
                   </div>
                   <p className="provider-selection-rate">{formatHourlyRate(provider)}</p>
                 </div>

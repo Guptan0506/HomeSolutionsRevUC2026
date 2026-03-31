@@ -15,7 +15,36 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
   const [hourlyCharge, setHourlyCharge] = useState('');
   const [experienceYears, setExperienceYears] = useState('');
   const [services, setServices] = useState('');
-  const [profilePictureUrl, setProfilePictureUrl] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState('');
+
+  const handlePhotoUpload = (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose a valid image file.');
+      return;
+    }
+
+    // Keep payloads reasonable when storing as base64 in PostgreSQL text columns.
+    if (file.size > 3 * 1024 * 1024) {
+      setError('Please choose an image smaller than 3MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfilePhoto(String(reader.result || ''));
+      setError('');
+    };
+    reader.onerror = () => {
+      setError('Unable to read the selected file. Please try another image.');
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -59,7 +88,8 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
         fullName, 
         email, 
         password, 
-        userRole: selectedRole 
+        userRole: selectedRole,
+        profilePhoto: profilePhoto || null,
       };
 
       // Add service provider fields if applicable
@@ -68,7 +98,6 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
         requestBody.hourlyCharge = parseFloat(hourlyCharge);
         requestBody.experienceYears = experienceYears ? parseInt(experienceYears) : 0;
         requestBody.services = services;
-        requestBody.profilePictureUrl = profilePictureUrl.trim() || null;
       }
 
       console.log('Signup request body:', requestBody);
@@ -171,6 +200,16 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
             required
           />
 
+          <label className="field-label" htmlFor="signup-photo">Profile Picture (Optional)</label>
+          <input
+            id="signup-photo"
+            type="file"
+            accept="image/*"
+            className="input-field auth-input auth-file-input"
+            onChange={handlePhotoUpload}
+          />
+          {profilePhoto && <img src={profilePhoto} alt="Profile preview" className="signup-photo-preview" />}
+
           {selectedRole === 'service_provider' && (
             <>
               <label className="field-label" htmlFor="signup-specialization">Specialization</label>
@@ -216,16 +255,6 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
                 value={services}
                 onChange={(e) => setServices(e.target.value)}
                 placeholder="e.g., Installation, Repair, Maintenance"
-              />
-
-              <label className="field-label" htmlFor="signup-picture">Profile Picture URL (Optional)</label>
-              <input
-                id="signup-picture"
-                type="text"
-                className="input-field auth-input"
-                value={profilePictureUrl}
-                onChange={(e) => setProfilePictureUrl(e.target.value)}
-                placeholder="https://example.com/photo.jpg"
               />
             </>
           )}

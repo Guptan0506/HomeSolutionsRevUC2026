@@ -18,6 +18,10 @@ function formatDateTime(value) {
   return date.toLocaleString();
 }
 
+function getInitial(name) {
+  return (name || 'C').trim().charAt(0).toUpperCase();
+}
+
 function ServiceProviderProfilePage({
   currentUser,
   serviceRequests,
@@ -48,6 +52,14 @@ function ServiceProviderProfilePage({
   const servicesProvided = useMemo(
     () => serviceRequests.filter((request) => request.status === 'completed'),
     [serviceRequests]
+  );
+  const activeAcceptRequest = useMemo(
+    () => serviceRequests.find((request) => request.requestId === activeAcceptRequestId) || null,
+    [serviceRequests, activeAcceptRequestId]
+  );
+  const activeCompleteRequest = useMemo(
+    () => serviceRequests.find((request) => request.requestId === activeCompleteRequestId) || null,
+    [serviceRequests, activeCompleteRequestId]
   );
 
   const displayPhoto = useMemo(() => {
@@ -210,7 +222,14 @@ function ServiceProviderProfilePage({
         {serviceRequests.map((request) => (
           <article className="card provider-request-card" key={request.requestId}>
             <div className="history-card-head">
-              <p className="history-id">Request #{request.requestId}</p>
+              <div className="request-customer-head">
+                {request.customerPhoto ? (
+                  <img src={request.customerPhoto} alt={request.customerName} className="request-customer-avatar" />
+                ) : (
+                  <div className="request-customer-avatar request-customer-avatar-fallback">{getInitial(request.customerName)}</div>
+                )}
+                <p className="history-id">Request #{request.requestId}</p>
+              </div>
               <span className={`history-status ${request.status}`}>{request.status.replace('_', ' ')}</span>
             </div>
 
@@ -251,7 +270,14 @@ function ServiceProviderProfilePage({
 
         {servicesProvided.map((request) => (
           <article className="card provider-request-card" key={`completed-${request.requestId}`}>
-            <p className="history-id">Request #{request.requestId}</p>
+            <div className="request-customer-head">
+              {request.customerPhoto ? (
+                <img src={request.customerPhoto} alt={request.customerName} className="request-customer-avatar" />
+              ) : (
+                <div className="request-customer-avatar request-customer-avatar-fallback">{getInitial(request.customerName)}</div>
+              )}
+              <p className="history-id">Request #{request.requestId}</p>
+            </div>
             <p className="history-line"><strong>Customer Name:</strong> {request.customerName}</p>
             <p className="history-line"><strong>Location:</strong> {request.location}</p>
             <p className="history-line"><strong>Description:</strong> {request.requestDescription}</p>
@@ -267,6 +293,26 @@ function ServiceProviderProfilePage({
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Accept request details">
           <div className="modal-card">
             <p className="modal-title">Accept Request</p>
+
+            {activeAcceptRequest && (
+              <div className="modal-customer-summary">
+                {activeAcceptRequest.customerPhoto ? (
+                  <img
+                    src={activeAcceptRequest.customerPhoto}
+                    alt={activeAcceptRequest.customerName}
+                    className="request-customer-avatar"
+                  />
+                ) : (
+                  <div className="request-customer-avatar request-customer-avatar-fallback">
+                    {getInitial(activeAcceptRequest.customerName)}
+                  </div>
+                )}
+                <div>
+                  <p className="modal-customer-name">{activeAcceptRequest.customerName}</p>
+                  <p className="modal-customer-sub">{activeAcceptRequest.requestTitle}</p>
+                </div>
+              </div>
+            )}
 
             <label className="field-label" htmlFor="accept-estimated-time">Estimated Time</label>
             <input
@@ -308,6 +354,26 @@ function ServiceProviderProfilePage({
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Complete request details">
           <div className="modal-card">
             <p className="modal-title">Complete Request</p>
+
+            {activeCompleteRequest && (
+              <div className="modal-customer-summary">
+                {activeCompleteRequest.customerPhoto ? (
+                  <img
+                    src={activeCompleteRequest.customerPhoto}
+                    alt={activeCompleteRequest.customerName}
+                    className="request-customer-avatar"
+                  />
+                ) : (
+                  <div className="request-customer-avatar request-customer-avatar-fallback">
+                    {getInitial(activeCompleteRequest.customerName)}
+                  </div>
+                )}
+                <div>
+                  <p className="modal-customer-name">{activeCompleteRequest.customerName}</p>
+                  <p className="modal-customer-sub">{activeCompleteRequest.requestTitle}</p>
+                </div>
+              </div>
+            )}
 
             <label className="field-label" htmlFor="complete-materials">Extra Materials Used</label>
             <textarea
