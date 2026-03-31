@@ -34,6 +34,8 @@ function ServiceProviderProfilePage({
   const [contact, setContact] = useState(currentUser.phone || currentUser.email || '');
   const [location, setLocation] = useState(currentUser.location || '');
   const [expertise, setExpertise] = useState(currentUser.specialization || '');
+  const [servicesOffered, setServicesOffered] = useState(currentUser.services || currentUser.sp_services || currentUser.specialization || '');
+  const [availability, setAvailability] = useState(currentUser.availability || '');
   const [experience, setExperience] = useState(currentUser.experience_years || '');
   const [baseRate, setBaseRate] = useState(currentUser.base_rate || currentUser.hourly_charge || '');
   const [saveMessage, setSaveMessage] = useState('');
@@ -89,6 +91,8 @@ function ServiceProviderProfilePage({
       phone: contact,
       location,
       specialization: expertise,
+      services: servicesOffered,
+      availability,
       experience_years: experience,
       base_rate: baseRate,
       profile_photo: photo,
@@ -202,6 +206,25 @@ function ServiceProviderProfilePage({
 
             <label className="field-label" htmlFor="provider-expertise">Expertise</label>
             <input id="provider-expertise" className="input-field profile-input" value={expertise} onChange={(e) => setExpertise(e.target.value)} />
+
+            <label className="field-label" htmlFor="provider-services">Work / Services Offered</label>
+            <input
+              id="provider-services"
+              className="input-field profile-input"
+              value={servicesOffered}
+              onChange={(e) => setServicesOffered(e.target.value)}
+              placeholder="e.g., Wiring, Switch Repair, Circuit Breakers"
+            />
+
+            <label className="field-label" htmlFor="provider-availability">Availability (Required to appear in provider list)</label>
+            <textarea
+              id="provider-availability"
+              className="input-field profile-input"
+              rows="3"
+              value={availability}
+              onChange={(e) => setAvailability(e.target.value)}
+              placeholder="e.g., Mon-Fri 9am-6pm, Saturday 10am-2pm"
+            />
 
             <label className="field-label" htmlFor="provider-experience">Experiences (Years)</label>
             <input id="provider-experience" className="input-field profile-input" value={experience} onChange={(e) => setExperience(e.target.value)} />

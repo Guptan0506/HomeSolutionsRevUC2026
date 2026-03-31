@@ -237,10 +237,11 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
               const id = provider.sp_id || provider.id;
               const name = provider.sp_name || provider.full_name || 'Professional';
               const specialization = provider.specialization || provider.service_type || 'General Services';
+              const availability = provider.availability ? ` | ${provider.availability}` : '';
 
               return (
                 <option key={id} value={id}>
-                  {name} - {specialization}
+                  {name} - {specialization}{availability}
                 </option>
               );
             })}
@@ -254,6 +255,9 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
             <p className="provider-highlight-name">{activeProvider.sp_name || activeProvider.full_name}</p>
             <p className="provider-highlight-sub">
               {activeProvider.specialization || activeProvider.service_type} • ${activeProvider.hourly_charge || activeProvider.hourly_rate}/hr
+            </p>
+            <p className="provider-highlight-sub provider-highlight-availability">
+              Availability: {activeProvider.availability || 'Availability not provided'}
             </p>
           </div>
         )}

@@ -70,7 +70,7 @@ function ServiceProviderSelectionPage({ selectedService, onBookNow }) {
     const normalizedService = selectedService.toLowerCase();
     const filtered = providers.filter((provider) => {
       const specialization = String(provider.specialization || provider.service_type || '').toLowerCase();
-      const listedServices = String(provider.services || '').toLowerCase();
+      const listedServices = String(provider.services || provider.sp_services || '').toLowerCase();
       return specialization.includes(normalizedService) || listedServices.includes(normalizedService);
     });
 
@@ -102,10 +102,11 @@ function ServiceProviderSelectionPage({ selectedService, onBookNow }) {
         <div className="provider-selection-grid">
           {visibleProviders.map((provider) => {
             const providerName = provider.sp_name || provider.full_name || 'Professional';
-            const providerService = provider.specialization || provider.service_type || 'General Home Service';
+            const providerService = provider.specialization || provider.services || provider.sp_services || provider.service_type || 'General Home Service';
             const providerId = provider.sp_id || provider.id;
             const providerPhoto = provider.profile_picture_url || provider.provider_photo || provider.profile_photo || '';
             const providerInitial = (providerName || 'P').trim().charAt(0).toUpperCase();
+            const providerAvailability = provider.availability || 'Availability not provided';
 
             return (
               <article className="card provider-selection-card" key={providerId}>
@@ -126,6 +127,7 @@ function ServiceProviderSelectionPage({ selectedService, onBookNow }) {
 
                 <p className="provider-selection-meta"><strong>Experience:</strong> {getExperience(provider)}</p>
                 <p className="provider-selection-meta"><strong>Rating:</strong> {getProviderRating(provider)} / 5</p>
+                <p className="provider-selection-meta"><strong>Availability:</strong> {providerAvailability}</p>
 
                 <button
                   type="button"

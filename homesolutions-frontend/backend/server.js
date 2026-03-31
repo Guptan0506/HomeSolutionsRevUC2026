@@ -120,6 +120,7 @@ const initializeServiceProviderTable = async () => {
         sp_phone VARCHAR(20),
         sp_location VARCHAR(255),
         specialization VARCHAR(255),
+        availability TEXT,
         hourly_charge DECIMAL(10, 2),
         experience_years INTEGER DEFAULT 0,
         services TEXT,
@@ -137,6 +138,7 @@ const initializeServiceProviderTable = async () => {
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_services TEXT`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS sp_base_price_per_hr DECIMAL(10, 2)`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS specialization VARCHAR(255)`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS availability TEXT`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS hourly_charge DECIMAL(10, 2)`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS experience_years INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS services TEXT`);
@@ -556,6 +558,8 @@ app.post('/api/auth/login', async (req, res) => {
          sp.sp_id,
          sp.sp_location,
          sp.specialization,
+         sp.availability,
+         sp.services,
          sp.experience_years,
          sp.hourly_charge,
          sp.profile_picture_url
@@ -590,6 +594,8 @@ app.post('/api/auth/login', async (req, res) => {
         sp_id: user.sp_id || null,
         location: user.sp_location || '',
         specialization: user.specialization || '',
+        availability: user.availability || '',
+        services: user.services || '',
         experience_years: user.experience_years || 0,
         base_rate: user.hourly_charge || 0,
       },
@@ -611,6 +617,7 @@ app.get('/api/providers', async (req, res) => {
        LEFT JOIN app_users au
          ON au.user_id = sp.user_id
          OR LOWER(COALESCE(au.email, '')) = LOWER(COALESCE(sp.sp_email, ''))
+       WHERE TRIM(COALESCE(sp.availability, '')) <> ''
        ORDER BY sp.sp_name ASC`
     );
     res.json(result.rows);
@@ -716,6 +723,8 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
       user_role,
       location,
       specialization,
+      availability,
+      services,
       experience_years,
       base_rate,
     } = req.body;
@@ -737,14 +746,16 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
+    const normalizedServices = (services || specialization || null);
+
     if ((user_role || userResult.rows[0].user_role) === 'service_provider') {
       await pool.query(
         `INSERT INTO service_provider (
            user_id, sp_name, sp_email, sp_phone, sp_location,
-           specialization, hourly_charge, experience_years, profile_picture_url,
+           specialization, availability, hourly_charge, experience_years, profile_picture_url,
            services, sp_services, sp_base_price_per_hr
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (user_id)
          DO UPDATE SET
            sp_name = EXCLUDED.sp_name,
@@ -752,6 +763,7 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
            sp_phone = EXCLUDED.sp_phone,
            sp_location = EXCLUDED.sp_location,
            specialization = EXCLUDED.specialization,
+           availability = EXCLUDED.availability,
            hourly_charge = EXCLUDED.hourly_charge,
            experience_years = EXCLUDED.experience_years,
            services = EXCLUDED.services,
@@ -765,11 +777,12 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
           phone || null,
           location || null,
           specialization || null,
+          availability || null,
           Number(base_rate || 0),
           Number(experience_years || 0),
           profile_photo || null,
-          specialization || null,
-          specialization || null,
+          normalizedServices,
+          normalizedServices,
           Number(base_rate || 0),
         ]
       );

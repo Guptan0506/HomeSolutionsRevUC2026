@@ -1185,6 +1185,10 @@ body {
   margin-top: 2px;
 }
 
+.provider-highlight-availability {
+  margin-top: 6px;
+}
+
 .field-label {
   font-size: 13px;
   display: block;

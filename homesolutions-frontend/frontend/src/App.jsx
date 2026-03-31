@@ -196,6 +196,8 @@ function App() {
               sp_id: provider.sp_id,
               location: provider.sp_location || prev.location || '',
               specialization: provider.specialization || prev.specialization || '',
+              availability: provider.availability || prev.availability || '',
+              services: provider.services || provider.sp_services || prev.services || '',
               experience_years: provider.experience_years || prev.experience_years || 0,
               base_rate: provider.hourly_charge || prev.base_rate || 0,
             }));
