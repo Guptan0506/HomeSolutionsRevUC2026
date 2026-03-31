@@ -2182,7 +2182,7 @@ app.get('/api/admin/requests', requireAuth, requireAdmin, async (req, res) => {
         u.full_name as customer_name,
         sp.sp_name as provider_name,
         sr.status,
-        (SELECT SUM(invoice_amount) FROM invoices WHERE request_id = sr.request_id) as total_amount,
+        (SELECT SUM(total_amount) FROM invoices WHERE request_id = sr.request_id) as total_amount,
         sr.submitted_at
       FROM service_requests sr
       LEFT JOIN app_users u ON sr.customer_id = u.user_id
@@ -2204,26 +2204,29 @@ app.get('/api/admin/revenue', requireAuth, requireAdmin, async (req, res) => {
   try {
     const totalQuery = `
       SELECT
-        SUM(invoice_amount) as total_revenue,
+        SUM(total_amount) as total_revenue,
         COUNT(*) as completed_invoices,
-        AVG(invoice_amount) as avg_transaction
+        AVG(total_amount) as avg_transaction
       FROM invoices
+      WHERE payment_status = 'completed'
     `;
 
     const commissionQuery = `
       SELECT
-        SUM(invoice_amount * 0.05) as total_commission,
-        SUM(invoice_amount * 0.95) as total_payouts
+        SUM(commission) as total_commission,
+        SUM(provider_payout_amount) as total_payouts
       FROM invoices
+      WHERE payment_status = 'completed'
     `;
 
     const serviceQuery = `
       SELECT
         sr.service_name,
-        SUM(i.invoice_amount) as revenue
+        SUM(i.total_amount) as revenue
       FROM invoices i
       LEFT JOIN service_requests sr ON i.request_id = sr.request_id
       WHERE sr.service_name IS NOT NULL
+        AND i.payment_status = 'completed'
       GROUP BY sr.service_name
       ORDER BY revenue DESC
     `;
@@ -2255,6 +2258,99 @@ app.get('/api/admin/revenue', requireAuth, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Admin revenue error:', err);
     return res.status(500).json({ message: 'Unable to fetch revenue data' });
+  }
+});
+
+// GET /api/admin/analytics - Advanced analytics insights
+app.get('/api/admin/analytics', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const [overviewResult, monthlyResult, serviceResult, locationResult, providerResult] = await Promise.all([
+      pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'pending') as pending_requests,
+          COUNT(*) FILTER (WHERE status = 'in_progress') as in_progress_requests,
+          COUNT(*) FILTER (WHERE status = 'completed') as completed_requests,
+          COUNT(*) FILTER (WHERE status = 'rejected') as rejected_requests,
+          ROUND(
+            (COUNT(*) FILTER (WHERE status = 'completed')::NUMERIC / NULLIF(COUNT(*), 0)) * 100,
+            2
+          ) as completion_rate,
+          ROUND(AVG(CASE WHEN customer_rating > 0 THEN customer_rating END)::NUMERIC, 2) as avg_customer_rating
+        FROM service_requests
+      `),
+      pool.query(`
+        SELECT
+          TO_CHAR(DATE_TRUNC('month', sr.submitted_at), 'YYYY-MM') as month,
+          COUNT(*) as requests_created,
+          COUNT(*) FILTER (WHERE sr.status = 'completed') as requests_completed,
+          COALESCE(SUM(i.total_amount), 0) as revenue
+        FROM service_requests sr
+        LEFT JOIN invoices i ON i.request_id = sr.request_id AND i.payment_status = 'completed'
+        WHERE sr.submitted_at >= NOW() - INTERVAL '6 months'
+        GROUP BY DATE_TRUNC('month', sr.submitted_at)
+        ORDER BY DATE_TRUNC('month', sr.submitted_at)
+      `),
+      pool.query(`
+        SELECT
+          sr.service_name,
+          COUNT(*) as total_requests,
+          COUNT(*) FILTER (WHERE sr.status = 'completed') as completed_requests,
+          ROUND(
+            (COUNT(*) FILTER (WHERE sr.status = 'completed')::NUMERIC / NULLIF(COUNT(*), 0)) * 100,
+            2
+          ) as completion_rate,
+          COALESCE(SUM(i.total_amount), 0) as revenue
+        FROM service_requests sr
+        LEFT JOIN invoices i ON i.request_id = sr.request_id AND i.payment_status = 'completed'
+        WHERE sr.service_name IS NOT NULL
+        GROUP BY sr.service_name
+        ORDER BY total_requests DESC, revenue DESC
+        LIMIT 10
+      `),
+      pool.query(`
+        SELECT
+          COALESCE(NULLIF(TRIM(sr.work_address), ''), 'Unknown') as area,
+          COUNT(*) as request_count,
+          COUNT(*) FILTER (WHERE sr.status = 'completed') as completed_count,
+          COALESCE(SUM(i.total_amount), 0) as revenue
+        FROM service_requests sr
+        LEFT JOIN invoices i ON i.request_id = sr.request_id AND i.payment_status = 'completed'
+        GROUP BY COALESCE(NULLIF(TRIM(sr.work_address), ''), 'Unknown')
+        ORDER BY request_count DESC
+        LIMIT 12
+      `),
+      pool.query(`
+        SELECT
+          sp.sp_id,
+          sp.sp_name,
+          sp.specialization,
+          COUNT(sr.request_id) FILTER (WHERE sr.status = 'completed') as completed_jobs,
+          ROUND(AVG(CASE WHEN sr.customer_rating > 0 THEN sr.customer_rating END)::NUMERIC, 2) as avg_rating,
+          ROUND(
+            (COUNT(sr.request_id) FILTER (WHERE sr.status IN ('accepted', 'in_progress', 'completed'))::NUMERIC /
+            NULLIF(COUNT(sr.request_id) FILTER (WHERE sr.status <> 'pending'), 0)) * 100,
+            2
+          ) as acceptance_rate,
+          COALESCE(SUM(i.provider_payout_amount), 0) as payout_earned
+        FROM service_provider sp
+        LEFT JOIN service_requests sr ON sr.sp_id = sp.sp_id
+        LEFT JOIN invoices i ON i.request_id = sr.request_id AND i.payment_status = 'completed'
+        GROUP BY sp.sp_id, sp.sp_name, sp.specialization
+        ORDER BY completed_jobs DESC, avg_rating DESC NULLS LAST
+        LIMIT 10
+      `),
+    ]);
+
+    return res.json({
+      overview: overviewResult.rows[0] || {},
+      monthly_trends: monthlyResult.rows || [],
+      service_demand: serviceResult.rows || [],
+      location_heatmap: locationResult.rows || [],
+      top_providers: providerResult.rows || [],
+    });
+  } catch (err) {
+    console.error('Admin analytics error:', err);
+    return res.status(500).json({ message: 'Unable to fetch advanced analytics' });
   }
 });
 

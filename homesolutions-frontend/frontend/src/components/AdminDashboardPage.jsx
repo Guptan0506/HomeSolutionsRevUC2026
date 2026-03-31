@@ -19,6 +19,7 @@ function AdminDashboardPage({ onLogout, currentUser }) {
   const [paymentSummary, setPaymentSummary] = useState(null);
   const [pendingPayouts, setPendingPayouts] = useState([]);
   const [pendingVerification, setPendingVerification] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   
   // Modal state
   const [actionModal, setActionModal] = useState(null); // { type, userId, providerId, action }
@@ -36,7 +37,7 @@ function AdminDashboardPage({ onLogout, currentUser }) {
     setError('');
 
     try {
-      const [statsRes, usersRes, providersRes, requestsRes, revenueRes, logsRes, paymentsRes, payoutsRes, pendingVerificationRes] = await Promise.all([
+      const [statsRes, usersRes, providersRes, requestsRes, revenueRes, logsRes, paymentsRes, payoutsRes, pendingVerificationRes, analyticsRes] = await Promise.all([
         fetch(buildApiUrl('/api/admin/stats'), {
           headers: getAuthHeaders(),
         }),
@@ -62,6 +63,9 @@ function AdminDashboardPage({ onLogout, currentUser }) {
           headers: getAuthHeaders(),
         }),
         fetch(buildApiUrl('/api/admin/verification-pending'), {
+          headers: getAuthHeaders(),
+        }),
+        fetch(buildApiUrl('/api/admin/analytics'), {
           headers: getAuthHeaders(),
         }),
       ]);
@@ -112,6 +116,11 @@ function AdminDashboardPage({ onLogout, currentUser }) {
       if (pendingVerificationRes.ok) {
         const verificationData = await readJsonSafely(pendingVerificationRes);
         setPendingVerification(Array.isArray(verificationData) ? verificationData : []);
+      }
+
+      if (analyticsRes.ok) {
+        const analyticsData = await readJsonSafely(analyticsRes);
+        setAnalytics(analyticsData || null);
       }
     } catch (err) {
       setError(err.message || 'Unable to load admin data');
@@ -280,6 +289,12 @@ function AdminDashboardPage({ onLogout, currentUser }) {
           onClick={() => setActiveTab('trust')}
         >
           Trust
+        </button>
+        <button
+          className={`admin-nav-btn ${activeTab === 'analytics' ? 'active' : ''}`}
+          onClick={() => setActiveTab('analytics')}
+        >
+          Analytics
         </button>
       </div>
 
@@ -921,6 +936,139 @@ function AdminDashboardPage({ onLogout, currentUser }) {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <div className="admin-revenue-section">
+            <h2>Advanced Analytics</h2>
+
+            <div className="revenue-cards">
+              <div className="revenue-card">
+                <div className="revenue-label">Completion Rate</div>
+                <div className="revenue-value">{Number(analytics?.overview?.completion_rate || 0).toFixed(1)}%</div>
+                <div className="revenue-detail">All-time request completion</div>
+              </div>
+              <div className="revenue-card">
+                <div className="revenue-label">Average Customer Rating</div>
+                <div className="revenue-value">{Number(analytics?.overview?.avg_customer_rating || 0).toFixed(2)} ⭐</div>
+                <div className="revenue-detail">Across completed services</div>
+              </div>
+              <div className="revenue-card">
+                <div className="revenue-label">Open Requests</div>
+                <div className="revenue-value">
+                  {(Number(analytics?.overview?.pending_requests || 0) + Number(analytics?.overview?.in_progress_requests || 0))}
+                </div>
+                <div className="revenue-detail">Pending + in progress</div>
+              </div>
+              <div className="revenue-card">
+                <div className="revenue-label">Rejected Requests</div>
+                <div className="revenue-value">{Number(analytics?.overview?.rejected_requests || 0)}</div>
+                <div className="revenue-detail">Requires demand/supply tuning</div>
+              </div>
+            </div>
+
+            <div className="admin-table-section" style={{ marginTop: '20px' }}>
+              <h3>Monthly Trends (Last 6 Months)</h3>
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>Requests Created</th>
+                      <th>Requests Completed</th>
+                      <th>Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(analytics?.monthly_trends || []).length > 0 ? (
+                      analytics.monthly_trends.map((row) => (
+                        <tr key={row.month}>
+                          <td>{row.month}</td>
+                          <td>{Number(row.requests_created || 0)}</td>
+                          <td>{Number(row.requests_completed || 0)}</td>
+                          <td>{formatCurrency(row.revenue || 0)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="4" className="empty-message">No monthly analytics yet</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="admin-table-section" style={{ marginTop: '20px' }}>
+              <h3>Demand by Service Type</h3>
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Total Requests</th>
+                      <th>Completed</th>
+                      <th>Completion Rate</th>
+                      <th>Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(analytics?.service_demand || []).length > 0 ? (
+                      analytics.service_demand.map((row) => (
+                        <tr key={row.service_name}>
+                          <td>{row.service_name || 'Unknown'}</td>
+                          <td>{Number(row.total_requests || 0)}</td>
+                          <td>{Number(row.completed_requests || 0)}</td>
+                          <td>{Number(row.completion_rate || 0).toFixed(1)}%</td>
+                          <td>{formatCurrency(row.revenue || 0)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="5" className="empty-message">No service demand analytics yet</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="overview-grid" style={{ marginTop: '20px' }}>
+              <div className="overview-section">
+                <h3>Geographic Demand Heatmap (Top Areas)</h3>
+                <div className="service-revenue-list">
+                  {(analytics?.location_heatmap || []).length > 0 ? (
+                    analytics.location_heatmap.map((row) => (
+                      <div className="service-revenue-item" key={`${row.area}-${row.request_count}`}>
+                        <span className="service-name">{row.area}</span>
+                        <span className="service-amount">{Number(row.request_count || 0)} req</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="empty-message">No area demand data yet</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="overview-section">
+                <h3>Top Provider Performance</h3>
+                <div className="service-revenue-list">
+                  {(analytics?.top_providers || []).length > 0 ? (
+                    analytics.top_providers.map((row) => (
+                      <div className="service-revenue-item" key={row.sp_id}>
+                        <span className="service-name">{row.sp_name}</span>
+                        <span className="service-amount">
+                          {Number(row.completed_jobs || 0)} jobs | {Number(row.avg_rating || 0).toFixed(1)} ⭐
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="empty-message">No provider performance data yet</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
