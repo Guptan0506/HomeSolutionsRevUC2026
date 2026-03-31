@@ -206,6 +206,7 @@ const initializeServiceRequestsTable = async () => {
     await pool.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS payment_method_saved BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS customer_rating INTEGER`);
     await pool.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS all_provider_ids TEXT`);
 
     // Legacy databases may have FKs targeting old tables; drop blocking constraints for compatibility.
     await pool.query(`ALTER TABLE service_requests DROP CONSTRAINT IF EXISTS service_requests_user_id_fkey`);
@@ -851,6 +852,55 @@ app.post('/api/requests', requireAuth, async (req, res) => {
   }
 });
 
+// POST submit a service request to multiple providers (up to 3)
+app.post('/api/requests-multi', requireAuth, async (req, res) => {
+  try {
+    const { user_id, sp_ids, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude } = req.body;
+    const normalizedUrgency = String(urgency || 'low').trim().toLowerCase();
+
+    const safeUrgency = ['low', 'medium', 'high'].includes(normalizedUrgency)
+      ? normalizedUrgency
+      : 'low';
+
+    if (!user_id || !sp_ids || !Array.isArray(sp_ids) || sp_ids.length === 0) {
+      return res.status(400).json({ message: 'user_id and sp_ids array (at least 1 provider) are required.' });
+    }
+
+    if (sp_ids.length > 3) {
+      return res.status(400).json({ message: 'Maximum 3 providers allowed per request.' });
+    }
+
+    if (!service_name) {
+      return res.status(400).json({ message: 'service_name is required.' });
+    }
+
+    // Store provider IDs as comma-separated string for later lookup
+    const allProviderIdsStr = sp_ids.map(id => Number(id)).join(',');
+
+    // Create one request for each provider
+    const createdRequests = [];
+    for (const sp_id of sp_ids) {
+      const numericSpId = Number(sp_id);
+      const newRequest = await pool.query(
+        `INSERT INTO service_requests 
+        (user_id, sp_id, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude, status, all_provider_ids) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11) RETURNING *`,
+        [user_id, numericSpId, service_name, date_required, safeUrgency, description, attachment_url, work_address, work_latitude, work_longitude, allProviderIdsStr]
+      );
+      createdRequests.push(newRequest.rows[0]);
+    }
+
+    res.json({
+      message: 'Service request sent to multiple providers',
+      requests: createdRequests,
+      count: createdRequests.length,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 // GET all requests for a specific user
 app.get('/api/requests/user/:user_id', requireAuth, async (req, res) => {
   try {
@@ -996,6 +1046,29 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
     }
 
     if (action === 'accept') {
+      // Fetch the request details to get all_provider_ids
+      const requestDetails = await pool.query(
+        'SELECT request_id, all_provider_ids FROM service_requests WHERE request_id = $1',
+        [id]
+      );
+
+      if (requestDetails.rows.length > 0) {
+        const { all_provider_ids } = requestDetails.rows[0];
+        
+        // If this was a multi-provider request, reject for other providers
+        if (all_provider_ids) {
+          const providerIds = all_provider_ids.split(',').map(p => Number(p.trim()));
+          
+          // Reject this request for all other providers
+          await pool.query(
+            `UPDATE service_requests
+             SET status = 'rejected'
+             WHERE request_id = $1 AND sp_id != $2 AND sp_id = ANY($3::integer[])`,
+            [id, requestLookup.rows[0].sp_id, providerIds]
+          );
+        }
+      }
+
       const updated = await pool.query(
         `UPDATE service_requests
          SET status = 'in_progress',

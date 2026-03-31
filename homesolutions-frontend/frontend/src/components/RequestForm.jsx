@@ -9,8 +9,8 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
   const [dateRequired, setDateRequired] = useState('');
   const [attachments, setAttachments] = useState([]);
   const [providers, setProviders] = useState([]);
-  const [selectedProviderId, setSelectedProviderId] = useState(
-    selectedProvider?.sp_id || selectedProvider?.id || ''
+  const [selectedProviderIds, setSelectedProviderIds] = useState(
+    selectedProvider?.sp_id || selectedProvider?.id ? [String(selectedProvider.sp_id || selectedProvider.id)] : []
   );
   const [isLoadingProviders, setIsLoadingProviders] = useState(true);
   const [providerLoadError, setProviderLoadError] = useState('');
@@ -26,12 +26,6 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
       setRequestTitle(selectedService);
     }
   }, [selectedService, requestTitle]);
-
-  useEffect(() => {
-    if (selectedProvider?.sp_id || selectedProvider?.id) {
-      setSelectedProviderId(String(selectedProvider.sp_id || selectedProvider.id));
-    }
-  }, [selectedProvider]);
 
   useEffect(() => {
     let isMounted = true;
@@ -93,7 +87,21 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
     return map;
   }, [providers]);
 
-  const activeProvider = selectedProvider || providerMap.get(String(selectedProviderId));
+  const selectedProviders = useMemo(() => {
+    return selectedProviderIds.map(id => providerMap.get(String(id))).filter(Boolean);
+  }, [selectedProviderIds, providerMap]);
+
+  const toggleProviderSelection = (providerId) => {
+    const idStr = String(providerId);
+    setSelectedProviderIds((prev) => {
+      if (prev.includes(idStr)) {
+        return prev.filter(id => id !== idStr);
+      } else if (prev.length < 3) {
+        return [...prev, idStr];
+      }
+      return prev;
+    });
+  };
 
   const addAvailabilitySlot = () => {
     if (!slotDate || !slotStart || !slotEnd) {
@@ -135,8 +143,8 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
       return;
     }
 
-    if (!selectedProviderId) {
-      setError('Please select a provider before submitting your request.');
+    if (selectedProviderIds.length === 0) {
+      setError('Please select at least one provider before submitting your request.');
       return;
     }
 
@@ -168,7 +176,7 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
 
       const payload = {
         user_id: currentUser.user_id,
-        sp_id: Number(selectedProviderId),
+        sp_ids: selectedProviderIds.map(id => Number(id)),
         service_name: requestTitle.trim(),
         date_required: dateRequired || availabilitySlots[0]?.date || null,
         urgency,
@@ -179,7 +187,7 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
         work_longitude: null,
       };
 
-      const response = await fetch(buildApiUrl('/api/requests'), {
+      const response = await fetch(buildApiUrl('/api/requests-multi'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -191,17 +199,21 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
         throw new Error(getApiErrorMessage(response, data, 'Unable to submit request right now.'));
       }
 
+      const providerNames = selectedProviders
+        .map(p => p?.sp_name || p?.full_name || 'Provider')
+        .join(', ');
+
       const summary = {
-        requestId: data.request_id || data.id || data.requestId || null,
+        requestId: data.requests?.[0]?.request_id || data.requests?.[0]?.id || null,
         requestTitle: requestTitle.trim(),
-        providerName: activeProvider?.sp_name || activeProvider?.full_name || 'Selected Provider',
+        providerName: providerNames,
         preferredDate: dateRequired || availabilitySlots[0]?.date || '',
         urgency,
         description,
         address,
-        estimate: Number(activeProvider?.hourly_charge || activeProvider?.hourly_rate || 0),
         attachmentCount: attachments.length,
         availabilitySlots,
+        providerCount: selectedProviderIds.length,
       };
 
       setRequestTitle('');
@@ -214,6 +226,7 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
       setSlotDate('');
       setSlotStart('');
       setSlotEnd('');
+      setSelectedProviderIds([]);
       onSuccess(summary);
     } catch (err) {
       setError(err.message || 'Unable to submit request right now.');
@@ -228,49 +241,100 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
 
       <form onSubmit={handleSubmit} className="card form-card" style={{ padding: '20px' }}>
         <div style={{ marginBottom: '15px' }}>
-          <label className="field-label" htmlFor="provider-select">
-            Select provider
+          <label className="field-label">
+            Select providers (up to 3)
           </label>
-          <select
-            id="provider-select"
-            className="input-field"
-            style={{ width: '100%', padding: '10px', borderRadius: '10px' }}
-            value={selectedProviderId}
-            onChange={(e) => setSelectedProviderId(e.target.value)}
-            required
-            disabled={isLoadingProviders}
-          >
-            <option value="">
-              {isLoadingProviders ? 'Loading providers...' : 'Choose a provider'}
-            </option>
-            {providers.map((provider) => {
-              const id = provider.sp_id || provider.id;
-              const name = provider.sp_name || provider.full_name || 'Professional';
-              const specialization = provider.specialization || provider.service_type || 'General Services';
-              const availability = provider.availability ? ` | ${provider.availability}` : '';
+          <p className="card-sub" style={{ marginBottom: '12px', color: 'var(--ink-700)' }}>
+            Choose 1-3 professionals. If one accepts, requests to others will be automatically canceled.
+          </p>
+          
+          {providerLoadError && <p className="auth-error" style={{ marginBottom: '12px' }}>{providerLoadError}</p>}
+          
+          {!isLoadingProviders && providers.length > 0 && (
+            <div style={{ display: 'grid', gap: '10px', marginBottom: '15px' }}>
+              {providers.map((provider) => {
+                const id = String(provider.sp_id || provider.id);
+                const isSelected = selectedProviderIds.includes(id);
+                const isDisabled = !isSelected && selectedProviderIds.length >= 3;
+                const name = provider.sp_name || provider.full_name || 'Professional';
+                const specialization = provider.specialization || provider.service_type || 'General Services';
 
-              return (
-                <option key={id} value={id}>
-                  {name} - {specialization}{availability}
-                </option>
-              );
-            })}
-          </select>
-          {providerLoadError && <p className="auth-error" style={{ marginTop: '8px' }}>{providerLoadError}</p>}
+                return (
+                  <label
+                    key={id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '12px',
+                      border: `2px solid ${isSelected ? 'var(--accent-ocean)' : 'var(--line-soft)'}`,
+                      backgroundColor: isSelected ? '#f0f6fa' : 'transparent',
+                      borderRadius: '8px',
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
+                      opacity: isDisabled ? 0.6 : 1,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleProviderSelection(id)}
+                      disabled={isDisabled}
+                      style={{ marginRight: '10px', cursor: isDisabled ? 'not-allowed' : 'pointer' }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: '0 0 4px 0', fontWeight: 500, color: 'var(--ink-900)' }}>{name}</p>
+                      <p style={{ margin: 0, fontSize: '13px', color: 'var(--ink-500)' }}>
+                        {specialization} • ${provider.hourly_charge || provider.hourly_rate}/hr
+                      </p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          {selectedProviders.length > 0 && (
+            <div style={{ marginBottom: '15px', padding: '12px', backgroundColor: '#f8fbff', borderRadius: '8px', border: '1px solid #b3deff' }}>
+              <p className="card-sub" style={{ margin: '0 0 10px 0', color: 'var(--ink-900)' }}>
+                Selected: {selectedProviders.length}/3
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {selectedProviders.map((provider) => (
+                  <div
+                    key={provider.sp_id || provider.id}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 12px',
+                      backgroundColor: 'white',
+                      border: '1px solid var(--accent-ocean)',
+                      borderRadius: '16px',
+                      fontSize: '13px',
+                      color: 'var(--accent-ocean)',
+                    }}
+                  >
+                    <span>{provider.sp_name || provider.full_name}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleProviderSelection(provider.sp_id || provider.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--accent-ocean)',
+                        cursor: 'pointer',
+                        fontSize: '16px',
+                        padding: '0',
+                        lineHeight: '1',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-
-        {activeProvider && (
-          <div className="provider-highlight">
-            <p className="provider-highlight-kicker">Selected professional</p>
-            <p className="provider-highlight-name">{activeProvider.sp_name || activeProvider.full_name}</p>
-            <p className="provider-highlight-sub">
-              {activeProvider.specialization || activeProvider.service_type} • ${activeProvider.hourly_charge || activeProvider.hourly_rate}/hr
-            </p>
-            <p className="provider-highlight-sub provider-highlight-availability">
-              Availability: {activeProvider.availability || 'Availability not provided'}
-            </p>
-          </div>
-        )}
 
         <div style={{ marginBottom: '15px' }}>
           <label className="field-label" htmlFor="request-title">
