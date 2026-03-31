@@ -158,37 +158,12 @@ async function run() {
   };
 
   if (!completeReq.ok) {
-    const fallbackPool = createPool();
-    try {
-      await fallbackPool.query(
-        `INSERT INTO invoices (
-           request_id, user_id, sp_id, service_name, base_amount, commission, total_amount, payment_status
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-         ON CONFLICT (request_id)
-         DO UPDATE SET
-           user_id = EXCLUDED.user_id,
-           sp_id = EXCLUDED.sp_id,
-           service_name = EXCLUDED.service_name,
-           base_amount = EXCLUDED.base_amount,
-           commission = EXCLUDED.commission,
-           total_amount = EXCLUDED.total_amount`,
-        [requestId, customerUserId, providerSpId, 'Plumbing', 100, 5, 105]
-      );
-
-      summary.completeRequest.fallbackInvoiceInserted = true;
-    } catch (err) {
-      summary.completeRequest.fallbackInvoiceInserted = false;
-      summary.completeRequest.fallbackError = err?.message || String(err);
-      await fallbackPool.end();
-      return {
-        success: false,
-        reason: 'request completion failed and fallback invoice insert failed',
-        summary,
-      };
-    }
-
-    await fallbackPool.end();
+    return {
+      success: false,
+      reason: 'request completion failed',
+      summary,
+      note: 'Provider cannot mark request as complete and generate invoice. Check backend service_name/base_amount columns and query paths.',
+    };
   }
 
   const invoiceResp = await jfetch(`${base}/api/invoices/${requestId}`);
