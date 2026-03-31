@@ -289,6 +289,40 @@ initializeServiceProviderTable();
 initializeServiceRequestsTable();
 initializeInvoicesTable();
 
+const initializeMessagesTable = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        message_id SERIAL PRIMARY KEY,
+        request_id INTEGER REFERENCES service_requests(request_id) ON DELETE CASCADE,
+        sender_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL,
+        sender_role VARCHAR(50),
+        recipient_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL,
+        message_text TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS request_id INTEGER REFERENCES service_requests(request_id) ON DELETE CASCADE`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_role VARCHAR(50)`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS recipient_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_text TEXT NOT NULL`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS messages_request_id_idx ON messages (request_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS messages_sender_id_idx ON messages (sender_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS messages_recipient_id_idx ON messages (recipient_id)`);
+
+    console.log('Messages table ready.');
+  } catch (err) {
+    console.error('Failed to initialize messages table:', err.message || err);
+  }
+};
+
+initializeMessagesTable();
+
 // Auth middleware: requires a user identifier in params, body, or x-user-id header
 function requireAuth(req, res, next) {
   const userId =
@@ -1217,6 +1251,98 @@ app.get('/api/invoices/:request_id', async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Invoice not found.' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// POST send a message
+app.post('/api/messages', requireAuth, async (req, res) => {
+  try {
+    const { request_id, sender_id, sender_role, recipient_id, message_text } = req.body;
+
+    if (!request_id || !sender_id || !recipient_id || !message_text?.trim()) {
+      return res.status(400).json({ message: 'request_id, sender_id, recipient_id, and message_text are required.' });
+    }
+
+    const trimmedMessage = message_text.trim();
+    
+    const result = await pool.query(
+      `INSERT INTO messages (request_id, sender_id, sender_role, recipient_id, message_text)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [request_id, sender_id, sender_role || 'customer', recipient_id, trimmedMessage]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// GET messages for a request (conversation history)
+app.get('/api/messages/:request_id', requireAuth, async (req, res) => {
+  try {
+    const { request_id } = req.params;
+
+    const result = await pool.query(
+      `SELECT
+         m.*,
+         au.full_name AS sender_name,
+         au.profile_photo AS sender_photo
+       FROM messages m
+       LEFT JOIN app_users au ON au.user_id = m.sender_id
+       WHERE m.request_id = $1
+       ORDER BY m.created_at ASC`,
+      [request_id]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// GET unread message count for a user
+app.get('/api/messages/unread-count/:user_id', requireAuth, async (req, res) => {
+  try {
+    const { user_id } = req.params;
+
+    const result = await pool.query(
+      `SELECT COUNT(*) as unread_count
+       FROM messages
+       WHERE recipient_id = $1 AND is_read = FALSE`,
+      [user_id]
+    );
+
+    res.json({ unread_count: parseInt(result.rows[0].unread_count, 10) });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// PATCH mark message as read
+app.patch('/api/messages/:message_id/read', requireAuth, async (req, res) => {
+  try {
+    const { message_id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE messages
+       SET is_read = TRUE
+       WHERE message_id = $1
+       RETURNING *`,
+      [message_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Message not found.' });
     }
 
     res.json(result.rows[0]);

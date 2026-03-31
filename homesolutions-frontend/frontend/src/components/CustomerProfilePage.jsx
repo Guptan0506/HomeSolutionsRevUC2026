@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import MessagingPanel from './MessagingPanel';
 
 function formatCurrency(amount) {
   const value = Number(amount || 0);
@@ -38,6 +39,8 @@ function statusLabel(status) {
 function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onRequestUpdate }) {
   const [profilePhoto, setProfilePhoto] = useState(currentUser.profile_photo || '');
   const [fullName, setFullName] = useState(currentUser.full_name || '');
+  const [messagingRequestId, setMessagingRequestId] = useState(null);
+  const [messagingProviderName, setMessagingProviderName] = useState('');
   const [email, setEmail] = useState(currentUser.email || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
   const [location, setLocation] = useState(currentUser.location || '');
@@ -217,10 +220,50 @@ function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onReq
                   </div>
                 </div>
               )}
+
+              <button
+                type="button"
+                className="btn-s"
+                style={{ marginTop: '12px', width: '100%' }}
+                onClick={() => {
+                  setMessagingRequestId(request.requestId);
+                  setMessagingProviderName(request.providerName);
+                }}
+              >
+                Message Provider
+              </button>
             </article>
           );
         })}
       </div>
+
+      {messagingRequestId && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 'min(90vw, 500px)',
+          height: 'min(90vh, 600px)',
+          zIndex: 1000,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <div style={{ width: '100%', height: '100%' }}>
+            <MessagingPanel
+              requestId={messagingRequestId}
+              currentUser={currentUser}
+              otherPartyName={messagingProviderName}
+              onClose={() => {
+                setMessagingRequestId(null);
+                setMessagingProviderName('');
+              }}
+            />
+          </div>
+        </div>
+      )}
     </section>
   );
 }

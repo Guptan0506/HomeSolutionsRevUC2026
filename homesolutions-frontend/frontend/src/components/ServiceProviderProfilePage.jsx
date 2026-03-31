@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import MessagingPanel from './MessagingPanel';
 
 function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -50,6 +51,8 @@ function ServiceProviderProfilePage({
   const [hoursWorked, setHoursWorked] = useState('');
   const [extraMaterialsCost, setExtraMaterialsCost] = useState('');
   const [extraFee, setExtraFee] = useState('');
+  const [messagingRequestId, setMessagingRequestId] = useState(null);
+  const [messagingCustomerName, setMessagingCustomerName] = useState('');
 
   const servicesProvided = useMemo(
     () => serviceRequests.filter((request) => request.status === 'completed'),
@@ -263,6 +266,17 @@ function ServiceProviderProfilePage({
             <p className="history-line"><strong>Date and Time Requested:</strong> {formatDateTime(request.requestedAt)}</p>
 
             <div className="provider-request-actions">
+              <button
+                type="button"
+                className="btn-s"
+                onClick={() => {
+                  setMessagingRequestId(request.requestId);
+                  setMessagingCustomerName(request.customerName);
+                }}
+                style={{ marginRight: '8px' }}
+              >
+                Message
+              </button>
               {request.status === 'pending' && (
                 <>
                   <button type="button" className="btn-p" onClick={() => handleOpenAccept(request.requestId)}>Accept</button>
@@ -448,6 +462,34 @@ function ServiceProviderProfilePage({
               <button type="button" className="btn-s" onClick={() => setActiveCompleteRequestId(null)}>Cancel</button>
               <button type="button" className="btn-p" onClick={handleSubmitComplete}>Complete</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {messagingRequestId && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 'min(90vw, 500px)',
+          height: 'min(90vh, 600px)',
+          zIndex: 1000,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <div style={{ width: '100%', height: '100%' }}>
+            <MessagingPanel
+              requestId={messagingRequestId}
+              currentUser={currentUser}
+              otherPartyName={messagingCustomerName}
+              onClose={() => {
+                setMessagingRequestId(null);
+                setMessagingCustomerName('');
+              }}
+            />
           </div>
         </div>
       )}
