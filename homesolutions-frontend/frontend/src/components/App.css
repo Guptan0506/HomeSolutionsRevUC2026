@@ -2880,3 +2880,215 @@ body {
   background: var(--ink-300);
   cursor: not-allowed;
 }
+
+/* ==================== LOCATION-BASED DISCOVERY STYLING ==================== */
+
+.providers-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f8f9fb;
+  border-radius: 8px;
+  border: 1px solid #dbe4ec;
+  align-items: center;
+}
+
+.location-badge {
+  padding: 8px 14px;
+  background: #e6f3ff;
+  color: #0f6e8c;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid #b3d9ff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-700);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.filter-select,
+.filter-input {
+  padding: 8px 12px;
+  border: 1px solid #dbe4ec;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  color: var(--ink-900);
+  font-family: 'Inter', sans-serif;
+}
+
+.filter-select:hover,
+.filter-input:hover {
+  border-color: var(--accent-ocean);
+  background: #f8f9fb;
+}
+
+.filter-select:focus,
+.filter-input:focus {
+  outline: none;
+  border-color: var(--accent-ocean);
+  box-shadow: 0 0 0 3px rgba(15, 110, 140, 0.1);
+}
+
+.filter-result-count {
+  font-size: 14px;
+  color: var(--ink-500);
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+/* Provider Card Pills */
+.card-meta .location-pill,
+.card-meta .rating-pill {
+  background: #e6f3ff;
+  color: #0f6e8c;
+  border: 1px solid #b3d9ff;
+}
+
+.card-meta .rating-pill {
+  background: #fff3cd;
+  color: #d97706;
+  border: 1px solid #fcd34d;
+}
+
+/* Location Input for Provider Profile */
+.location-section {
+  margin-top: 24px;
+  padding: 20px;
+  background: #f8f9fb;
+  border-radius: 8px;
+  border: 1px solid #dbe4ec;
+}
+
+.location-section h3 {
+  margin-bottom: 16px;
+  font-size: 16px;
+  color: var(--ink-900);
+}
+
+.location-form {
+  display: grid;
+  gap: 12px;
+}
+
+.location-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.location-input-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-700);
+}
+
+.location-input-group input {
+  padding: 10px 12px;
+  border: 1px solid #dbe4ec;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+}
+
+.location-input-group input:focus {
+  outline: none;
+  border-color: var(--accent-ocean);
+  box-shadow: 0 0 0 3px rgba(15, 110, 140, 0.1);
+}
+
+.location-coordinates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.location-button-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.location-button-group button {
+  padding: 10px 16px;
+  font-size: 13px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.location-button-group .btn-p {
+  background: var(--accent-ocean);
+  color: white;
+  flex: 1;
+}
+
+.location-button-group .btn-p:hover {
+  background: #1e4563;
+}
+
+.location-button-group .btn-s {
+  background: #e2e8f0;
+  color: var(--ink-900);
+}
+
+.location-button-group .btn-s:hover {
+  background: #cbd5e1;
+}
+
+.location-status {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.location-status.success {
+  background: #e6ffed;
+  color: #2ecc71;
+  border: 1px solid #2ecc71;
+}
+
+.location-status.error {
+  background: #fee;
+  color: #c53030;
+  border: 1px solid #ef8354;
+}
+
+.location-status.loading {
+  background: #e6f3ff;
+  color: #0f6e8c;
+  border: 1px solid #b3d9ff;
+}
+
+/* Map Container Placeholder */
+.map-container {
+  width: 100%;
+  height: 300px;
+  border-radius: 8px;
+  border: 1px solid #dbe4ec;
+  background: #f0f4f8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+  color: var(--ink-500);
+  font-size: 14px;
+}

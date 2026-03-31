@@ -1,6 +1,6 @@
 import React from 'react';
 
-function ProviderCard({ name, type, price, experience, initials, onSelect, profilePictureUrl }) {
+function ProviderCard({ name, type, price, experience, distance, rating, initials, onSelect, profilePictureUrl }) {
   return (
     <div className="card">
       <div className="card-head">
@@ -25,6 +25,8 @@ function ProviderCard({ name, type, price, experience, initials, onSelect, profi
 
       <div className="card-meta">
         <span className="pill">{experience} years experience</span>
+        {distance && <span className="pill location-pill">📍 {distance}</span>}
+        {rating && <span className="pill rating-pill">{rating}</span>}
         <span className="pill">Verified Profile</span>
       </div>
 

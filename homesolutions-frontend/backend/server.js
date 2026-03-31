@@ -182,6 +182,16 @@ const initializeServiceProviderTable = async () => {
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS average_rating DECIMAL(3, 2) DEFAULT 0`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS acceptance_rate DECIMAL(5, 2) DEFAULT 0`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS suspension_reason TEXT`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS warning_count INTEGER DEFAULT 0`);
+    
+    // Location columns for geolocation features
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8)`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8)`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS address_full TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS service_provider_location_idx ON service_provider (latitude, longitude)`);
+    
     await pool.query(`ALTER TABLE service_provider ALTER COLUMN sp_services DROP NOT NULL`);
     await pool.query(`ALTER TABLE service_provider ALTER COLUMN profile_picture_url DROP NOT NULL`);
 
@@ -872,6 +882,163 @@ app.get('/api/providers/by-user/:user_id', async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
+  }
+});
+
+// ==================== LOCATION-BASED DISCOVERY ENDPOINTS ====================
+
+// Search providers near a location with distance calculation
+app.get('/api/providers/search/near', async (req, res) => {
+  try {
+    const { latitude, longitude, distance = 50, serviceType } = req.query;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({ message: 'latitude and longitude required' });
+    }
+
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    const maxDistance = parseFloat(distance) || 50; // Default 50 miles
+
+    // Haversine distance formula in SQL (results in miles)
+    let query = `
+      SELECT 
+        sp.*,
+        ROUND(
+          ( 3959 * acos( 
+            cos( radians($1) ) * cos( radians( latitude ) ) * 
+            cos( radians( longitude ) - radians($2) ) + 
+            sin( radians($1) ) * sin( radians( latitude ) ) 
+          ) )::NUMERIC, 
+          2
+        ) AS distance_miles
+      FROM service_provider
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+        AND is_suspended = FALSE
+    `;
+
+    const params = [lat, lng];
+
+    // Filter by service type if provided
+    if (serviceType && serviceType.trim()) {
+      query += ` AND (
+        LOWER(specialization) LIKE LOWER($${params.length + 1}) OR 
+        LOWER(services) LIKE LOWER($${params.length + 1})
+      )`;
+      params.push(`%${serviceType}%`);
+    }
+
+    query += ` HAVING (
+      3959 * acos( 
+        cos( radians($1) ) * cos( radians( latitude ) ) * 
+        cos( radians( longitude ) - radians($2) ) + 
+        sin( radians($1) ) * sin( radians( latitude ) ) 
+      )
+    ) < $${params.length + 1}
+    ORDER BY distance_miles ASC
+    LIMIT 100`;
+
+    params.push(maxDistance);
+
+    const result = await pool.query(query, params);
+    res.json({
+      count: result.rows.length,
+      providers: result.rows,
+      searchLocation: { latitude: lat, longitude: lng, radiusMiles: maxDistance },
+    });
+  } catch (err) {
+    console.error('Location search error:', err);
+    res.status(500).json({ message: 'Failed to search providers by location' });
+  }
+});
+
+// Update provider location (latitude/longitude)
+app.put('/api/providers/:spId/location', requireAuth, async (req, res) => {
+  try {
+    const { spId } = req.params;
+    const { latitude, longitude, address_full } = req.body;
+    const userId = req.user.id;
+
+    // Verify provider owns this account
+    const providerResult = await pool.query(
+      'SELECT user_id FROM service_provider WHERE sp_id = $1',
+      [spId]
+    );
+
+    if (providerResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Provider not found' });
+    }
+
+    if (providerResult.rows[0].user_id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Validate coordinates
+    if (latitude !== undefined && longitude !== undefined) {
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({ message: 'Invalid coordinates' });
+      }
+
+      const result = await pool.query(
+        `UPDATE service_provider 
+         SET latitude = $1, longitude = $2, address_full = $3 
+         WHERE sp_id = $4 
+         RETURNING *`,
+        [lat, lng, address_full || null, spId]
+      );
+
+      res.json({
+        message: 'Location updated successfully',
+        provider: result.rows[0],
+      });
+    } else {
+      res.status(400).json({ message: 'latitude and longitude required' });
+    }
+  } catch (err) {
+    console.error('Update location error:', err);
+    res.status(500).json({ message: 'Failed to update provider location' });
+  }
+});
+
+// Get provider location for map display
+app.get('/api/providers/:spId/location', async (req, res) => {
+  try {
+    const { spId } = req.params;
+
+    const result = await pool.query(
+      `SELECT sp_id, sp_name, sp_phone, latitude, longitude, address_full, 
+              hourly_charge, specialization, average_rating
+       FROM service_provider 
+       WHERE sp_id = $1 AND is_suspended = FALSE`,
+      [spId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Provider not found' });
+    }
+
+    const provider = result.rows[0];
+
+    if (!provider.latitude || !provider.longitude) {
+      return res.status(404).json({ 
+        message: 'Provider location not yet set',
+        provider: provider,
+      });
+    }
+
+    res.json({
+      provider: provider,
+      coordinates: {
+        latitude: provider.latitude,
+        longitude: provider.longitude,
+      },
+    });
+  } catch (err) {
+    console.error('Get location error:', err);
+    res.status(500).json({ message: 'Failed to get provider location' });
   }
 });
 
