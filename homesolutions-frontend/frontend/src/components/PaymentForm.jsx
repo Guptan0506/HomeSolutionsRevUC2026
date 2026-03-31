@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { CardElement, Elements, useStripe, useElements } from '@stripe/react-stripe-js';
 import { buildApiUrl, getAuthHeaders } from '../api';
+import { money } from './formatMoney';
 
 let stripePromise;
 
@@ -128,10 +129,6 @@ function PaymentFormContent({ invoiceId, totalAmount, onPaymentSuccess, onPaymen
       </button>
     </form>
   );
-}
-
-function money(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
 }
 
 export async function PaymentForm({ invoiceId, totalAmount, onPaymentSuccess, onPaymentError }) {

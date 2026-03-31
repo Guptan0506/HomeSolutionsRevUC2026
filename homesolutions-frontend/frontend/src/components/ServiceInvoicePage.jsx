@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { buildApiUrl, getAuthHeaders, getAuthToken } from '../api';
-import { CardElement, Elements, useStripe, useElements } from '@stripe/react-stripe-js';
-
-function money(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
-}
+import { buildApiUrl, getAuthHeaders } from '../api';
+import { PaymentForm } from './PaymentForm';
+import { money } from './formatMoney';
 
 function splitDateTime(value) {
   if (!value) {
@@ -23,144 +20,9 @@ function splitDateTime(value) {
   };
 }
 
-function PaymentFormContent({ invoiceId, totalAmount, onPaymentSuccess }) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [clientSecret, setClientSecret] = useState(null);
-  const [errorMessage, setErrorMessage] = useState('');
-  const token = getAuthToken();
-
-  // Fetch payment intent on mount
-  useEffect(() => {
-    const fetchPaymentIntent = async () => {
-      try {
-        const response = await fetch(buildApiUrl(`/invoices/${invoiceId}/create-payment-intent`), {
-          method: 'POST',
-          headers: getAuthHeaders(),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to create payment intent');
-        }
-
-        const data = await response.json();
-        setClientSecret(data.clientSecret);
-      } catch (err) {
-        setErrorMessage(err.message || 'Failed to initialize payment');
-      }
-    };
-
-    if (token) {
-      fetchPaymentIntent();
-    }
-  }, [invoiceId, token]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
-
-    setIsProcessing(true);
-    setErrorMessage('');
-
-    try {
-      const cardElement = elements.getElement(CardElement);
-
-      // Confirm the payment using the card element
-      const result = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: cardElement,
-        },
-      });
-
-      if (result.error) {
-        setErrorMessage(result.error.message);
-      } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
-        // Confirm payment on backend
-        const confirmResponse = await fetch(buildApiUrl(`/invoices/${invoiceId}/confirm-payment`), {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ paymentIntentId: result.paymentIntent.id }),
-        });
-
-        if (!confirmResponse.ok) {
-          throw new Error('Failed to confirm payment');
-        }
-
-        onPaymentSuccess('Payment successful! Invoice marked as paid.');
-      }
-    } catch (err) {
-      setErrorMessage(err.message || 'Payment processing failed');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  if (!clientSecret) {
-    return <div className="payment-loading">Initializing payment form...</div>;
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="payment-form">
-      <div className="form-group">
-        <label htmlFor="card-element">Credit or debit card</label>
-        <div className="card-element-wrapper">
-          <CardElement
-            id="card-element"
-            options={{
-              style: {
-                base: {
-                  fontSize: '15px',
-                  color: '#0f6e8c',
-                  '::placeholder': { color: '#dbe4ec' },
-                },
-                invalid: {
-                  color: '#ef8354',
-                },
-              },
-            }}
-          />
-        </div>
-      </div>
-
-      {errorMessage && <div className="error-message">{errorMessage}</div>}
-
-      <button
-        type="submit"
-        disabled={!stripe || isProcessing}
-        className="btn-p"
-        style={{ marginTop: '16px', width: '100%' }}
-      >
-        {isProcessing ? 'Processing...' : `Pay ${money(totalAmount)}`}
-      </button>
-    </form>
-  );
-}
-
 function ServiceInvoicePage({ invoiceRequest, onBackToProfile }) {
   const [paymentStatus, setPaymentStatus] = useState('pending');
   const [successMessage, setSuccessMessage] = useState('');
-  const [stripePromise, setStripePromise] = useState(null);
-
-  // Initialize Stripe dynamically
-  useEffect(() => {
-    const initializeStripe = async () => {
-      const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_publican';
-      if (publishableKey) {
-        try {
-          const { loadStripe } = await import('@stripe/stripe-js');
-          const stripe = await loadStripe(publishableKey);
-          setStripePromise(stripe);
-        } catch (err) {
-          console.error('Failed to load Stripe:', err);
-        }
-      }
-    };
-    initializeStripe();
-  }, []);
 
   // Check payment status
   useEffect(() => {
@@ -239,21 +101,22 @@ function ServiceInvoicePage({ invoiceRequest, onBackToProfile }) {
           <strong>Total:</strong> {money(total)}
         </p>
 
-        {!isPaid && stripePromise && (
-          <Elements stripe={stripePromise}>
-            <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #dbe4ec' }}>
-              <h4 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: '600' }}>Payment Details</h4>
-              <PaymentFormContent
-                invoiceId={invoiceRequest.invoiceId}
-                totalAmount={total}
-                onPaymentSuccess={(msg) => {
-                  setSuccessMessage(msg);
-                  setPaymentStatus('completed');
-                  setTimeout(() => setSuccessMessage(''), 3000);
-                }}
-              />
-            </div>
-          </Elements>
+        {!isPaid && (
+          <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #dbe4ec' }}>
+            <h4 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: '600' }}>Payment Details</h4>
+            <PaymentForm
+              invoiceId={invoiceRequest.invoiceId}
+              totalAmount={total}
+              onPaymentSuccess={(msg) => {
+                setSuccessMessage(msg);
+                setPaymentStatus('completed');
+                setTimeout(() => setSuccessMessage(''), 3000);
+              }}
+              onPaymentError={(err) => {
+                console.error('Payment error:', err);
+              }}
+            />
+          </div>
         )}
 
         <button type="button" className="btn-p" style={{ marginTop: '24px' }} onClick={onBackToProfile}>
