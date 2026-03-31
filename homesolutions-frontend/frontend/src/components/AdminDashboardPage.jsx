@@ -5,7 +5,7 @@ function formatCurrency(amount) {
   return `$${(Number(amount) || 0).toFixed(2)}`;
 }
 
-function AdminDashboardPage({ onLogout, currentUser }) {
+function AdminDashboardPage({ onLogout }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

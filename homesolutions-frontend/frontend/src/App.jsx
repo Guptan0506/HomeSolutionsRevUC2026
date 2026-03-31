@@ -13,7 +13,7 @@ import ServiceInvoicePage from "./components/ServiceInvoicePage";
 import TroubleshootChatbot from "./components/TroubleshootChatbot";
 import Toast from "./components/Toast";
 import AdminDashboardPage from "./components/AdminDashboardPage";
-import { buildApiUrl, getApiErrorMessage, readJsonSafely, setAuthToken, clearAuthToken, getAuthToken } from "./api";
+import { buildApiUrl, getApiErrorMessage, readJsonSafely, setAuthToken, clearAuthToken } from "./api";
 
 const featuredProfessionals = [
   {

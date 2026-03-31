@@ -88,18 +88,6 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-<<<<<<< Updated upstream
-// Stripe webhook must receive raw bytes for signature verification.
-app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
-
-const jsonParser = express.json({ limit: '1mb' });
-app.use((req, res, next) => {
-  if (req.path === '/api/webhooks/stripe') {
-    return next();
-  }
-
-  return jsonParser(req, res, next);
-=======
 app.use(express.json({
   limit: '1mb',
   verify: (req, _res, buf) => {
@@ -132,7 +120,6 @@ app.use((req, res, next) => {
   });
 
   next();
->>>>>>> Stashed changes
 });
 
 // Rate Limiters for critical endpoints
@@ -508,8 +495,6 @@ const initializeModerationTables = async () => {
   }
 };
 
-<<<<<<< Updated upstream
-=======
 initializeModerationTables();
 
 const initializeOperationsTables = async () => {
@@ -588,7 +573,6 @@ const logNotificationEvent = async ({ eventType, recipientUserId, recipientEmail
   }
 };
 
->>>>>>> Stashed changes
 const calculateBadgeLevel = (trustScore, verificationStatus) => {
   if (verificationStatus !== 'verified') {
     return 'new';
@@ -645,7 +629,6 @@ const recalculateProviderTrustScore = async (providerId) => {
   return { trustScore, badgeLevel };
 };
 
-<<<<<<< Updated upstream
 async function resolveServiceRequestUserColumn() {
   const result = await pool.query(
     `SELECT column_name
@@ -667,20 +650,6 @@ async function resolveServiceRequestUserColumn() {
 
   return null;
 }
-=======
-const isValidDocumentUrl = (value) => {
-  if (!value) {
-    return true;
-  }
-
-  try {
-    const parsed = new URL(String(value));
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
-  } catch {
-    return false;
-  }
-};
->>>>>>> Stashed changes
 
 // Auth middleware: requires a user identifier in params, body, or x-user-id header
 function requireAuth(req, res, next) {
@@ -1867,23 +1836,27 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
       );
 
       const source = requestLookup.rows[0];
+      const completedRequestInfo = customerInfo.rows[0] || {};
       const requestDate = source.submitted_at ? new Date(source.submitted_at) : new Date();
       const requestDateOnly = requestDate.toISOString().slice(0, 10);
       const requestTimeOnly = requestDate.toTimeString().slice(0, 8);
       const completedDateOnly = completedAt.toISOString().slice(0, 10);
       const completedTimeOnly = completedAt.toTimeString().slice(0, 8);
+      const resolvedServiceName = completedRequestInfo.service_name || source.service_name || 'General Service';
 
       await pool.query(
         `INSERT INTO invoices (
            request_id, user_id, sp_id, request_date, request_time, completion_date, completion_time,
-           base_rate_per_hour, hours_worked, labor_cost, extra_materials_cost, extra_fee,
+           service_name, base_amount, base_rate_per_hour, hours_worked, labor_cost, extra_materials_cost, extra_fee,
            subtotal, tax, commission, total_amount
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          ON CONFLICT (request_id)
          DO UPDATE SET
            completion_date = EXCLUDED.completion_date,
            completion_time = EXCLUDED.completion_time,
+           service_name = EXCLUDED.service_name,
+           base_amount = EXCLUDED.base_amount,
            base_rate_per_hour = EXCLUDED.base_rate_per_hour,
            hours_worked = EXCLUDED.hours_worked,
            labor_cost = EXCLUDED.labor_cost,
@@ -1901,6 +1874,8 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
           requestTimeOnly,
           completedDateOnly,
           completedTimeOnly,
+          resolvedServiceName,
+          subtotal,
           baseRate,
           workedHours,
           toMoney(baseRate * workedHours),
@@ -2126,14 +2101,14 @@ app.post('/api/chat/troubleshoot', async (req, res) => {
     let parsedResponse;
     try {
       parsedResponse = JSON.parse(rawResponse);
-    } catch (parseErr) {
+    } catch {
       // Try to extract JSON if Gemini added extra text
       const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
           parsedResponse = JSON.parse(jsonMatch[0]);
           console.log('Extracted JSON from Gemini response');
-        } catch (innerErr) {
+        } catch {
           console.error('Failed to parse extracted JSON:', jsonMatch[0]);
           parsedResponse = {
             troubleshootingSteps: rawResponse,
@@ -2636,10 +2611,6 @@ app.post('/api/admin/providers/:spId/suspend', requireAuth, requireAdmin, async 
       return res.status(400).json({ message: 'Provider ID required' });
     }
 
-    // Get the provider's user_id for logging
-    const providerResult = await pool.query(`SELECT user_id FROM service_provider WHERE sp_id = $1`, [spId]);
-    const provider = providerResult.rows[0];
-
     // Suspend the provider
     await pool.query(
       `UPDATE service_provider SET is_suspended = TRUE, suspension_reason = $1 WHERE sp_id = $2`,
@@ -2975,19 +2946,13 @@ app.post('/api/webhooks/stripe', async (req, res) => {
     let event;
 
     if (endpointSecret) {
-<<<<<<< Updated upstream
       if (!ensureStripeConfigured(res)) {
         return;
       }
 
-      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-    } else {
-      event = JSON.parse(req.body.toString('utf8'));
-=======
       event = stripe.webhooks.constructEvent(req.rawBody, sig, endpointSecret);
     } else {
       event = req.body;
->>>>>>> Stashed changes
     }
 
     const existingEvent = await pool.query('SELECT event_id FROM webhook_events WHERE event_id = $1', [event.id]);

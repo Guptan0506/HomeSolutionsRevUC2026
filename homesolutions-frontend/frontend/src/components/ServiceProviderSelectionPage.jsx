@@ -11,16 +11,6 @@ function getExperience(provider) {
   return `${experience} years`;
 }
 
-function getProviderRating(provider) {
-  if (provider.rating && Number(provider.rating) > 0) {
-    return Number(provider.rating).toFixed(1);
-  }
-
-  const experience = Number(provider.experience_years || provider.experience || 0);
-  const generated = Math.min(4.9, 4.2 + experience * 0.08);
-  return generated.toFixed(1);
-}
-
 function ServiceProviderSelectionPage({ selectedService, customerLocation, onBookNow }) {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);

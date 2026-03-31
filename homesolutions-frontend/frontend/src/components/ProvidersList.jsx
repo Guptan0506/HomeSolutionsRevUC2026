@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ProviderCard from './ProviderCard';
 import { buildApiUrl } from '../api';
 
@@ -10,6 +10,49 @@ function ProvidersList({ onSelect }) {
   const [useGeolocation, setUseGeolocation] = useState(true);
   const [distanceFilter, setDistanceFilter] = useState(50);
   const [serviceTypeFilter, setServiceTypeFilter] = useState('');
+
+  const searchNearby = useCallback(async (latitude, longitude) => {
+    try {
+      const params = new URLSearchParams({
+        latitude,
+        longitude,
+        distance: distanceFilter,
+        ...(serviceTypeFilter && { serviceType: serviceTypeFilter }),
+      });
+
+      const response = await fetch(buildApiUrl(`/api/providers/search/near?${params}`));
+
+      if (!response.ok) {
+        throw new Error('Failed to search nearby providers');
+      }
+
+      const data = await response.json();
+      setProviders(data.providers || []);
+      setLoading(false);
+    } catch (err) {
+      console.error('Search error:', err);
+      setError('Failed to search nearby providers');
+      setLoading(false);
+    }
+  }, [distanceFilter, serviceTypeFilter]);
+
+  const fetchAllProviders = useCallback(async () => {
+    try {
+      const response = await fetch(buildApiUrl('/api/providers'));
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch providers');
+      }
+
+      const data = await response.json();
+      setProviders(Array.isArray(data) ? data : []);
+      setLoading(false);
+    } catch (err) {
+      console.error('Fetch error:', err);
+      setError('Could not connect to the service database.');
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchProviders = async () => {
@@ -41,50 +84,7 @@ function ProvidersList({ onSelect }) {
     };
 
     fetchProviders();
-  }, [useGeolocation]);
-
-  const searchNearby = async (latitude, longitude) => {
-    try {
-      const params = new URLSearchParams({
-        latitude,
-        longitude,
-        distance: distanceFilter,
-        ...(serviceTypeFilter && { serviceType: serviceTypeFilter }),
-      });
-
-      const response = await fetch(buildApiUrl(`/api/providers/search/near?${params}`));
-
-      if (!response.ok) {
-        throw new Error('Failed to search nearby providers');
-      }
-
-      const data = await response.json();
-      setProviders(data.providers || []);
-      setLoading(false);
-    } catch (err) {
-      console.error('Search error:', err);
-      setError('Failed to search nearby providers');
-      setLoading(false);
-    }
-  };
-
-  const fetchAllProviders = async () => {
-    try {
-      const response = await fetch(buildApiUrl('/api/providers'));
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch providers');
-      }
-
-      const data = await response.json();
-      setProviders(Array.isArray(data) ? data : []);
-      setLoading(false);
-    } catch (err) {
-      console.error('Fetch error:', err);
-      setError('Could not connect to the service database.');
-      setLoading(false);
-    }
-  };
+  }, [useGeolocation, searchNearby, fetchAllProviders]);
 
   const handleFilterChange = async () => {
     if (userLocation) {
