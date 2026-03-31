@@ -14,6 +14,12 @@ function AdminDashboardPage({ onLogout, currentUser }) {
   const [providers, setProviders] = useState([]);
   const [requests, setRequests] = useState([]);
   const [revenue, setRevenue] = useState(null);
+  const [moderationLogs, setModerationLogs] = useState([]);
+  
+  // Modal state
+  const [actionModal, setActionModal] = useState(null); // { type, userId, providerId, action }
+  const [actionReason, setActionReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     fetchAdminData();
@@ -24,7 +30,7 @@ function AdminDashboardPage({ onLogout, currentUser }) {
     setError('');
 
     try {
-      const [statsRes, usersRes, providersRes, requestsRes, revenueRes] = await Promise.all([
+      const [statsRes, usersRes, providersRes, requestsRes, revenueRes, logsRes] = await Promise.all([
         fetch(buildApiUrl('/api/admin/stats'), {
           headers: getAuthHeaders(),
         }),
@@ -38,6 +44,9 @@ function AdminDashboardPage({ onLogout, currentUser }) {
           headers: getAuthHeaders(),
         }),
         fetch(buildApiUrl('/api/admin/revenue'), {
+          headers: getAuthHeaders(),
+        }),
+        fetch(buildApiUrl('/api/admin/moderation-logs'), {
           headers: getAuthHeaders(),
         }),
       ]);
@@ -68,10 +77,51 @@ function AdminDashboardPage({ onLogout, currentUser }) {
         const revenueData = await readJsonSafely(revenueRes);
         setRevenue(revenueData);
       }
+
+      if (logsRes.ok) {
+        const logsData = await readJsonSafely(logsRes);
+        setModerationLogs(Array.isArray(logsData) ? logsData : []);
+      }
     } catch (err) {
       setError(err.message || 'Unable to load admin data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAction = async () => {
+    if (!actionModal) return;
+
+    setActionLoading(true);
+    try {
+      const { type, userId, providerId, action } = actionModal;
+      const endpoint = userId ? `/api/admin/users/${userId}/${action}` : `/api/admin/providers/${providerId}/${action}`;
+      
+      const response = await fetch(buildApiUrl(endpoint), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          reason: actionReason,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await readJsonSafely(response);
+        throw new Error(errorData.message || `Unable to ${action} ${type}`);
+      }
+
+      // Show success and refresh data
+      setError('');
+      setActionModal(null);
+      setActionReason('');
+      await fetchAdminData();
+    } catch (err) {
+      setError(err.message || 'Action failed');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -127,6 +177,12 @@ function AdminDashboardPage({ onLogout, currentUser }) {
           onClick={() => setActiveTab('revenue')}
         >
           Revenue
+        </button>
+        <button
+          className={`admin-nav-btn ${activeTab === 'moderation' ? 'active' : ''}`}
+          onClick={() => setActiveTab('moderation')}
+        >
+          Moderation
         </button>
       </div>
 
@@ -253,23 +309,74 @@ function AdminDashboardPage({ onLogout, currentUser }) {
                     <th>Phone</th>
                     <th>Location</th>
                     <th>Requests</th>
+                    <th>Status</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.length > 0 ? (
                     users.map((user) => (
-                      <tr key={user.user_id}>
+                      <tr key={user.user_id} className={user.is_suspended ? 'suspended-row' : ''}>
                         <td>{user.user_id}</td>
                         <td>{user.full_name}</td>
                         <td>{user.email}</td>
                         <td>{user.phone || 'N/A'}</td>
                         <td>{user.location || 'N/A'}</td>
                         <td className="metric-badge">{user.request_count || 0}</td>
+                        <td>
+                          <span className={`status-badge ${user.is_suspended ? 'suspended' : 'active'}`}>
+                            {user.is_suspended ? '🚫 Suspended' : '✓ Active'}
+                          </span>
+                          {user.warning_count > 0 && <span className="warning-badge">⚠️ {user.warning_count}</span>}
+                        </td>
+                        <td className="action-cell">
+                          {user.is_suspended ? (
+                            <button
+                              className="btn-action unsuspend"
+                              onClick={() =>
+                                setActionModal({
+                                  type: 'user',
+                                  userId: user.user_id,
+                                  action: 'unsuspend',
+                                })
+                              }
+                            >
+                              Unsuspend
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                className="btn-action suspend"
+                                onClick={() =>
+                                  setActionModal({
+                                    type: 'user',
+                                    userId: user.user_id,
+                                    action: 'suspend',
+                                  })
+                                }
+                              >
+                                Suspend
+                              </button>
+                              <button
+                                className="btn-action warn"
+                                onClick={() =>
+                                  setActionModal({
+                                    type: 'user',
+                                    userId: user.user_id,
+                                    action: 'warn',
+                                  })
+                                }
+                              >
+                                Warn
+                              </button>
+                            </>
+                          )}
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="6" className="empty-message">
+                      <td colSpan="8" className="empty-message">
                         No customers yet
                       </td>
                     </tr>
@@ -294,12 +401,13 @@ function AdminDashboardPage({ onLogout, currentUser }) {
                     <th>Completed</th>
                     <th>Rate/Hour</th>
                     <th>Status</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {providers.length > 0 ? (
                     providers.map((provider) => (
-                      <tr key={provider.sp_id}>
+                      <tr key={provider.sp_id} className={provider.is_suspended ? 'suspended-row' : ''}>
                         <td>{provider.sp_id}</td>
                         <td>{provider.sp_name}</td>
                         <td>{provider.specialization}</td>
@@ -309,15 +417,59 @@ function AdminDashboardPage({ onLogout, currentUser }) {
                         <td>{provider.completed_requests || 0}</td>
                         <td>{formatCurrency(provider.hourly_charge || 0)}</td>
                         <td>
-                          <span className={`status-badge ${provider.availability ? 'available' : 'unavailable'}`}>
-                            {provider.availability ? 'Available' : 'Unavailable'}
+                          <span className={`status-badge ${provider.is_suspended ? 'suspended' : (provider.availability ? 'available' : 'unavailable')}`}>
+                            {provider.is_suspended ? '🚫 Suspended' : (provider.availability ? 'Available' : 'Unavailable')}
                           </span>
+                          {provider.warning_count > 0 && <span className="warning-badge">⚠️ {provider.warning_count}</span>}
+                        </td>
+                        <td className="action-cell">
+                          {provider.is_suspended ? (
+                            <button
+                              className="btn-action unsuspend"
+                              onClick={() =>
+                                setActionModal({
+                                  type: 'provider',
+                                  providerId: provider.sp_id,
+                                  action: 'unsuspend',
+                                })
+                              }
+                            >
+                              Unsuspend
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                className="btn-action suspend"
+                                onClick={() =>
+                                  setActionModal({
+                                    type: 'provider',
+                                    providerId: provider.sp_id,
+                                    action: 'suspend',
+                                  })
+                                }
+                              >
+                                Suspend
+                              </button>
+                              <button
+                                className="btn-action warn"
+                                onClick={() =>
+                                  setActionModal({
+                                    type: 'provider',
+                                    providerId: provider.sp_id,
+                                    action: 'warn',
+                                  })
+                                }
+                              >
+                                Warn
+                              </button>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="empty-message">
+                      <td colSpan="8" className="empty-message">
                         No providers registered yet
                       </td>
                     </tr>
@@ -419,10 +571,108 @@ function AdminDashboardPage({ onLogout, currentUser }) {
             </div>
           </div>
         )}
+
+        {activeTab === 'moderation' && (
+          <div className="admin-table-section">
+            <h2>Moderation Logs</h2>
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Admin</th>
+                    <th>Target</th>
+                    <th>Action</th>
+                    <th>Reason</th>
+                    <th>Details</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {moderationLogs.length > 0 ? (
+                    moderationLogs.slice(0, 50).map((log) => (
+                      <tr key={log.log_id}>
+                        <td>{log.admin_name || 'System'}</td>
+                        <td>
+                          {log.target_user_name ? (
+                            <>
+                              <strong>{log.target_user_name}</strong> (User #{log.target_user_id})
+                            </>
+                          ) : log.target_provider_name ? (
+                            <>
+                              <strong>{log.target_provider_name}</strong> (Provider #{log.target_provider_id})
+                            </>
+                          ) : (
+                            'Unknown'
+                          )}
+                        </td>
+                        <td>
+                          <span className={`action-badge ${log.action_type.toLowerCase()}`}>
+                            {log.action_type.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td>{log.reason || '-'}</td>
+                        <td className="details-cell">{log.details || '-'}</td>
+                        <td>{new Date(log.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="empty-message">
+                        No moderation actions yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Action Modal */}
+      {actionModal && (
+        <div className="admin-modal-overlay" onClick={() => !actionLoading && setActionModal(null)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>
+              {actionModal.action === 'suspend'
+                ? `Suspend ${actionModal.type}`
+                : actionModal.action === 'unsuspend'
+                  ? `Unsuspend ${actionModal.type}`
+                  : `Warn ${actionModal.type}`}
+            </h3>
+            {(actionModal.action === 'suspend' || actionModal.action === 'warn') && (
+              <div className="form-group">
+                <label>Reason:</label>
+                <textarea
+                  value={actionReason}
+                  onChange={(e) => setActionReason(e.target.value)}
+                  placeholder="Enter reason for this action..."
+                  disabled={actionLoading}
+                />
+              </div>
+            )}
+            <div className="modal-actions">
+              <button
+                className="btn-s"
+                onClick={() => setActionModal(null)}
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                className={`btn-p ${actionModal.action === 'suspend' ? 'btn-danger' : ''}`}
+                onClick={handleAction}
+                disabled={actionLoading}
+              >
+                {actionLoading ? 'Processing...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="admin-footer">
-        <button className="btn-p" onClick={fetchAdminData}>
+        <button className="btn-p" onClick={fetchAdminData} disabled={actionLoading}>
           Refresh Data
         </button>
       </div>

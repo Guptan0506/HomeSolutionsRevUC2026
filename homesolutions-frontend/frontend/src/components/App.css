@@ -2482,6 +2482,223 @@ body {
   padding: 12px 32px;
 }
 
+/* Phase 6: Moderation Styles */
+
+.suspended-row {
+  opacity: 0.7;
+  background: rgba(229, 62, 62, 0.05);
+}
+
+.suspended-row td {
+  color: var(--danger);
+}
+
+.warning-badge {
+  display: inline-block;
+  margin-left: 8px;
+  background: rgba(217, 119, 6, 0.15);
+  color: var(--warning);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.action-cell {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-action {
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  color: var(--ink-700);
+}
+
+.btn-action:hover {
+  background: var(--bg);
+  transform: translateY(-1px);
+}
+
+.btn-action.suspend {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-action.suspend:hover {
+  background: rgba(229, 62, 62, 0.1);
+}
+
+.btn-action.warn {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.btn-action.warn:hover {
+  background: rgba(217, 119, 6, 0.1);
+}
+
+.btn-action.unsuspend {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.btn-action.unsuspend:hover {
+  background: rgba(56, 161, 105, 0.1);
+}
+
+.status-badge.suspended {
+  background: rgba(229, 62, 62, 0.1);
+  color: var(--danger);
+}
+
+.status-badge.active {
+  background: rgba(56, 161, 105, 0.1);
+  color: var(--success);
+}
+
+.action-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg);
+  color: var(--ink-700);
+  text-transform: capitalize;
+}
+
+.action-badge.user_suspended,
+.action-badge.provider_suspended {
+  background: rgba(229, 62, 62, 0.1);
+  color: var(--danger);
+}
+
+.action-badge.user_unsuspended,
+.action-badge.provider_unsuspended {
+  background: rgba(56, 161, 105, 0.1);
+  color: var(--success);
+}
+
+.action-badge.user_warned,
+.action-badge.provider_warned {
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--warning);
+}
+
+.details-cell {
+  font-size: 12px;
+  color: var(--ink-500);
+  font-style: italic;
+}
+
+/* Modal Styles */
+
+.admin-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 150ms ease;
+}
+
+.admin-modal {
+  background: #fff;
+  border-radius: 8px;
+  padding: 32px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 400px;
+  width: 90%;
+  animation: slideInUp 200ms ease;
+}
+
+.admin-modal h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink-900);
+  margin-bottom: 20px;
+}
+
+.admin-modal .form-group {
+  margin-bottom: 20px;
+}
+
+.admin-modal .form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-700);
+  margin-bottom: 8px;
+}
+
+.admin-modal .form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  color: var(--ink-900);
+  resize: vertical;
+  min-height: 80px;
+}
+
+.admin-modal .form-group textarea:disabled {
+  background: var(--bg);
+  color: var(--ink-500);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.modal-actions .btn-s,
+.modal-actions .btn-p {
+  padding: 10px 18px;
+  font-size: 13px;
+}
+
+.modal-actions .btn-p.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+}
+
+.modal-actions .btn-p.btn-danger:hover {
+  background: #c53030;
+}
+
+.modal-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes slideInUp {
   from {
     opacity: 0;

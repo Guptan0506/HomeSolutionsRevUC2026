@@ -357,6 +357,46 @@ const initializeMessagesTable = async () => {
 
 initializeMessagesTable();
 
+// Phase 6: Moderation Tables
+const initializeModerationTables = async () => {
+  try {
+    // Add moderation columns to app_users
+    await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS suspension_reason TEXT`);
+    await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS warning_count INTEGER DEFAULT 0`);
+
+    // Add moderation columns to service_provider
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS suspension_reason TEXT`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS warning_count INTEGER DEFAULT 0`);
+
+    // Create moderation logs table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS moderation_logs (
+        log_id SERIAL PRIMARY KEY,
+        admin_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL,
+        target_user_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL,
+        target_provider_id INTEGER REFERENCES service_provider(sp_id) ON DELETE SET NULL,
+        action_type VARCHAR(50) NOT NULL,
+        reason TEXT,
+        details TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS moderation_logs_admin_id_idx ON moderation_logs (admin_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS moderation_logs_target_user_id_idx ON moderation_logs (target_user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS moderation_logs_target_provider_id_idx ON moderation_logs (target_provider_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS moderation_logs_created_at_idx ON moderation_logs (created_at)`);
+
+    console.log('Moderation tables ready.');
+  } catch (err) {
+    console.error('Failed to initialize moderation tables:', err.message || err);
+  }
+};
+
+initializeModerationTables();
+
 // Auth middleware: requires a user identifier in params, body, or x-user-id header
 function requireAuth(req, res, next) {
   // Accept token from:
@@ -1778,6 +1818,228 @@ app.get('/api/admin/revenue', requireAuth, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Admin revenue error:', err);
     return res.status(500).json({ message: 'Unable to fetch revenue data' });
+  }
+});
+
+// ============================================================================
+// Phase 6: ADMIN MODERATION ENDPOINTS
+// ============================================================================
+
+// POST /api/admin/users/:userId/suspend - Suspend a customer
+app.post('/api/admin/users/:userId/suspend', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const { reason } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID required' });
+    }
+
+    // Suspend the user
+    await pool.query(
+      `UPDATE app_users SET is_suspended = TRUE, suspension_reason = $1 WHERE user_id = $2`,
+      [sanitizeInput(reason || 'No reason provided'), userId],
+    );
+
+    // Log the action
+    await pool.query(
+      `INSERT INTO moderation_logs (admin_id, target_user_id, action_type, reason)
+       VALUES ($1, $2, $3, $4)`,
+      [req.user.user_id, userId, 'USER_SUSPENDED', sanitizeInput(reason || 'No reason provided')],
+    );
+
+    return res.json({ message: 'User suspended successfully' });
+  } catch (err) {
+    console.error('Suspend user error:', err);
+    return res.status(500).json({ message: 'Unable to suspend user' });
+  }
+});
+
+// POST /api/admin/users/:userId/unsuspend - Unsuspend a customer
+app.post('/api/admin/users/:userId/unsuspend', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID required' });
+    }
+
+    // Unsuspend the user
+    await pool.query(
+      `UPDATE app_users SET is_suspended = FALSE, suspension_reason = NULL WHERE user_id = $1`,
+      [userId],
+    );
+
+    // Log the action
+    await pool.query(
+      `INSERT INTO moderation_logs (admin_id, target_user_id, action_type)
+       VALUES ($1, $2, $3)`,
+      [req.user.user_id, userId, 'USER_UNSUSPENDED'],
+    );
+
+    return res.json({ message: 'User unsuspended successfully' });
+  } catch (err) {
+    console.error('Unsuspend user error:', err);
+    return res.status(500).json({ message: 'Unable to unsuspend user' });
+  }
+});
+
+// POST /api/admin/providers/:spId/suspend - Suspend a service provider
+app.post('/api/admin/providers/:spId/suspend', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const spId = parseInt(req.params.spId);
+    const { reason } = req.body;
+
+    if (!spId) {
+      return res.status(400).json({ message: 'Provider ID required' });
+    }
+
+    // Get the provider's user_id for logging
+    const providerResult = await pool.query(`SELECT user_id FROM service_provider WHERE sp_id = $1`, [spId]);
+    const provider = providerResult.rows[0];
+
+    // Suspend the provider
+    await pool.query(
+      `UPDATE service_provider SET is_suspended = TRUE, suspension_reason = $1 WHERE sp_id = $2`,
+      [sanitizeInput(reason || 'No reason provided'), spId],
+    );
+
+    // Log the action
+    await pool.query(
+      `INSERT INTO moderation_logs (admin_id, target_provider_id, action_type, reason)
+       VALUES ($1, $2, $3, $4)`,
+      [req.user.user_id, spId, 'PROVIDER_SUSPENDED', sanitizeInput(reason || 'No reason provided')],
+    );
+
+    return res.json({ message: 'Provider suspended successfully' });
+  } catch (err) {
+    console.error('Suspend provider error:', err);
+    return res.status(500).json({ message: 'Unable to suspend provider' });
+  }
+});
+
+// POST /api/admin/providers/:spId/unsuspend - Unsuspend a service provider
+app.post('/api/admin/providers/:spId/unsuspend', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const spId = parseInt(req.params.spId);
+
+    if (!spId) {
+      return res.status(400).json({ message: 'Provider ID required' });
+    }
+
+    // Unsuspend the provider
+    await pool.query(
+      `UPDATE service_provider SET is_suspended = FALSE, suspension_reason = NULL WHERE sp_id = $1`,
+      [spId],
+    );
+
+    // Log the action
+    await pool.query(
+      `INSERT INTO moderation_logs (admin_id, target_provider_id, action_type)
+       VALUES ($1, $2, $3)`,
+      [req.user.user_id, spId, 'PROVIDER_UNSUSPENDED'],
+    );
+
+    return res.json({ message: 'Provider unsuspended successfully' });
+  } catch (err) {
+    console.error('Unsuspend provider error:', err);
+    return res.status(500).json({ message: 'Unable to unsuspend provider' });
+  }
+});
+
+// POST /api/admin/users/:userId/warn - Issue a warning to a user
+app.post('/api/admin/users/:userId/warn', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+    const { reason } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID required' });
+    }
+
+    // Increment warning count
+    const updateResult = await pool.query(
+      `UPDATE app_users SET warning_count = warning_count + 1 WHERE user_id = $1 RETURNING warning_count`,
+      [userId],
+    );
+
+    const warningCount = updateResult.rows[0]?.warning_count || 0;
+
+    // Log the action
+    await pool.query(
+      `INSERT INTO moderation_logs (admin_id, target_user_id, action_type, reason, details)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [req.user.user_id, userId, 'USER_WARNED', sanitizeInput(reason || 'No reason provided'), `Warning count: ${warningCount}`],
+    );
+
+    return res.json({ message: 'Warning issued successfully', warning_count: warningCount });
+  } catch (err) {
+    console.error('Warn user error:', err);
+    return res.status(500).json({ message: 'Unable to issue warning' });
+  }
+});
+
+// POST /api/admin/providers/:spId/warn - Issue a warning to a provider
+app.post('/api/admin/providers/:spId/warn', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const spId = parseInt(req.params.spId);
+    const { reason } = req.body;
+
+    if (!spId) {
+      return res.status(400).json({ message: 'Provider ID required' });
+    }
+
+    // Increment warning count
+    const updateResult = await pool.query(
+      `UPDATE service_provider SET warning_count = warning_count + 1 WHERE sp_id = $1 RETURNING warning_count`,
+      [spId],
+    );
+
+    const warningCount = updateResult.rows[0]?.warning_count || 0;
+
+    // Log the action
+    await pool.query(
+      `INSERT INTO moderation_logs (admin_id, target_provider_id, action_type, reason, details)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [req.user.user_id, spId, 'PROVIDER_WARNED', sanitizeInput(reason || 'No reason provided'), `Warning count: ${warningCount}`],
+    );
+
+    return res.json({ message: 'Warning issued successfully', warning_count: warningCount });
+  } catch (err) {
+    console.error('Warn provider error:', err);
+    return res.status(500).json({ message: 'Unable to issue warning' });
+  }
+});
+
+// GET /api/admin/moderation-logs - View all moderation actions
+app.get('/api/admin/moderation-logs', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const query = `
+      SELECT
+        ml.log_id,
+        ml.admin_id,
+        admin.full_name as admin_name,
+        ml.target_user_id,
+        target_u.full_name as target_user_name,
+        ml.target_provider_id,
+        target_sp.sp_name as target_provider_name,
+        ml.action_type,
+        ml.reason,
+        ml.details,
+        ml.created_at
+      FROM moderation_logs ml
+      LEFT JOIN app_users admin ON ml.admin_id = admin.user_id
+      LEFT JOIN app_users target_u ON ml.target_user_id = target_u.user_id
+      LEFT JOIN service_provider target_sp ON ml.target_provider_id = target_sp.sp_id
+      ORDER BY ml.created_at DESC
+      LIMIT 200
+    `;
+
+    const result = await pool.query(query);
+    return res.json(result.rows || []);
+  } catch (err) {
+    console.error('Admin moderation logs error:', err);
+    return res.status(500).json({ message: 'Unable to fetch moderation logs' });
   }
 });
 
