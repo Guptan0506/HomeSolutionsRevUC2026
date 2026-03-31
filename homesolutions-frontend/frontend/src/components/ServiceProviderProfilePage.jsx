@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import MessagingPanel from './MessagingPanel';
+import { useUnreadMessages } from '../hooks/useUnreadMessages';
 
 function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -53,6 +54,9 @@ function ServiceProviderProfilePage({
   const [extraFee, setExtraFee] = useState('');
   const [messagingRequestId, setMessagingRequestId] = useState(null);
   const [messagingCustomerName, setMessagingCustomerName] = useState('');
+
+  // Fetch unread message counts
+  const { unreadCounts } = useUnreadMessages(currentUser?.user_id, true);
 
   const servicesProvided = useMemo(
     () => serviceRequests.filter((request) => request.status === 'completed'),
@@ -273,9 +277,12 @@ function ServiceProviderProfilePage({
                   setMessagingRequestId(request.requestId);
                   setMessagingCustomerName(request.customerName);
                 }}
-                style={{ marginRight: '8px' }}
+                style={{ marginRight: '8px', position: 'relative' }}
               >
                 Message
+                {unreadCounts[request.requestId] > 0 && (
+                  <span className="notification-badge">{unreadCounts[request.requestId]}</span>
+                )}
               </button>
               {request.status === 'pending' && (
                 <>

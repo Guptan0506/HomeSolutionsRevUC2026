@@ -4,6 +4,13 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const {
+  notifyRequestAccepted,
+  notifyRequestAcceptedToCustomer,
+  notifyRequestDeclined,
+  notifyServiceCompleted,
+  notifyNewMessage,
+} = require('./notificationService');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
@@ -1095,12 +1102,18 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
     if (action === 'accept') {
       // Fetch the request details to get all_provider_ids
       const requestDetails = await pool.query(
-        'SELECT request_id, all_provider_ids FROM service_requests WHERE request_id = $1',
+        `SELECT sr.request_id, sr.all_provider_ids, sr.service_name, sr.user_id,
+                au.email as customer_email, au.full_name as customer_name,
+                sp.sp_email as provider_email, sp.sp_name as provider_name
+         FROM service_requests sr
+         LEFT JOIN app_users au ON sr.user_id = au.user_id
+         LEFT JOIN service_provider sp ON sr.sp_id = sp.sp_id
+         WHERE sr.request_id = $1`,
         [id]
       );
 
       if (requestDetails.rows.length > 0) {
-        const { all_provider_ids } = requestDetails.rows[0];
+        const { all_provider_ids, service_name, customer_email, customer_name, provider_email, provider_name } = requestDetails.rows[0];
         
         // If this was a multi-provider request, reject for other providers
         if (all_provider_ids) {
@@ -1114,6 +1127,10 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
             [id, requestLookup.rows[0].sp_id, providerIds]
           );
         }
+
+        // Send notifications
+        notifyRequestAccepted(provider_email, provider_name, service_name);
+        notifyRequestAcceptedToCustomer(customer_email, customer_name, provider_name, service_name);
       }
 
       const updated = await pool.query(
@@ -1132,6 +1149,15 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
     }
 
     if (action === 'decline') {
+      // Fetch customer info for notification
+      const customerInfo = await pool.query(
+        `SELECT sr.user_id, sr.service_name, au.email as customer_email, au.full_name as customer_name
+         FROM service_requests sr
+         LEFT JOIN app_users au ON sr.user_id = au.user_id
+         WHERE sr.request_id = $1`,
+        [id]
+      );
+
       const updated = await pool.query(
         `UPDATE service_requests
          SET status = 'rejected',
@@ -1144,10 +1170,27 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
         [id]
       );
 
+      // Send notification to customer
+      if (customerInfo.rows.length > 0) {
+        const { customer_email, customer_name, service_name } = customerInfo.rows[0];
+        notifyRequestDeclined(customer_email, customer_name, service_name);
+      }
+
       return res.json(updated.rows[0]);
     }
 
     if (action === 'complete') {
+      // Fetch customer info for notification
+      const customerInfo = await pool.query(
+        `SELECT sr.user_id, sr.service_name, au.email as customer_email, au.full_name as customer_name,
+                sp.sp_name as provider_name
+         FROM service_requests sr
+         LEFT JOIN app_users au ON sr.user_id = au.user_id
+         LEFT JOIN service_provider sp ON sr.sp_id = sp.sp_id
+         WHERE sr.request_id = $1`,
+        [id]
+      );
+
       const baseRate = toMoney(base_rate_per_hour);
       const workedHours = Number(hours_worked || 0);
       const materialCost = toMoney(extra_materials_cost);
@@ -1223,6 +1266,12 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
         ]
       );
 
+      // Send notification to customer
+      if (customerInfo.rows.length > 0) {
+        const { customer_email, customer_name, service_name, provider_name } = customerInfo.rows[0];
+        notifyServiceCompleted(customer_email, customer_name, provider_name, service_name);
+      }
+
       return res.json(updated.rows[0]);
     }
 
@@ -1278,6 +1327,24 @@ app.post('/api/messages', requireAuth, async (req, res) => {
       [request_id, sender_id, sender_role || 'customer', recipient_id, trimmedMessage]
     );
 
+    // Fetch recipient and sender info to send notification
+    const recipientInfo = await pool.query(
+      `SELECT au.email, au.full_name FROM app_users au WHERE au.user_id = $1`,
+      [recipient_id]
+    );
+
+    const senderInfo = await pool.query(
+      `SELECT au.full_name FROM app_users au WHERE au.user_id = $1`,
+      [sender_id]
+    );
+
+    // Send notification to recipient
+    if (recipientInfo.rows.length > 0 && senderInfo.rows.length > 0) {
+      const { email: recipient_email, full_name: recipient_name } = recipientInfo.rows[0];
+      const { full_name: sender_name } = senderInfo.rows[0];
+      notifyNewMessage(recipient_email, recipient_name, sender_name);
+    }
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err.message);
@@ -1315,13 +1382,20 @@ app.get('/api/messages/unread-count/:user_id', requireAuth, async (req, res) => 
     const { user_id } = req.params;
 
     const result = await pool.query(
-      `SELECT COUNT(*) as unread_count
+      `SELECT request_id, COUNT(*) as unread_count
        FROM messages
-       WHERE recipient_id = $1 AND is_read = FALSE`,
+       WHERE recipient_id = $1 AND is_read = FALSE
+       GROUP BY request_id`,
       [user_id]
     );
 
-    res.json({ unread_count: parseInt(result.rows[0].unread_count, 10) });
+    // Convert to map: { request_id: unread_count }
+    const unreadMap = {};
+    result.rows.forEach(row => {
+      unreadMap[row.request_id] = parseInt(row.unread_count, 10);
+    });
+
+    res.json(unreadMap);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');

@@ -11,6 +11,7 @@ import ServiceProviderSelectionPage from "./components/ServiceProviderSelectionP
 import ServiceProviderProfilePage from "./components/ServiceProviderProfilePage";
 import ServiceInvoicePage from "./components/ServiceInvoicePage";
 import TroubleshootChatbot from "./components/TroubleshootChatbot";
+import Toast from "./components/Toast";
 import { buildApiUrl, getApiErrorMessage, readJsonSafely } from "./api";
 
 const featuredProfessionals = [
@@ -127,6 +128,7 @@ function App() {
   const [requestHistory, setRequestHistory] = useState([]);
   const [serviceProviderRequests, setServiceProviderRequests] = useState([]);
   const [invoiceRequest, setInvoiceRequest] = useState(null);
+  const [toast, setToast] = useState(null);
   const marqueeViewportRef = useRef(null);
   const servicesSectionRef = useRef(null);
   const [shouldScrollToServices, setShouldScrollToServices] = useState(false);
@@ -317,6 +319,10 @@ function App() {
     setInvoiceRequest(null);
   };
 
+  const showNotification = (message, type = 'info') => {
+    setToast({ message, type });
+  };
+
   const handleProfileSave = async (updatedUser) => {
     if (!currentUser?.user_id) {
       return;
@@ -407,13 +413,17 @@ function App() {
 
     try {
       let action = '';
+      let notificationMessage = '';
 
       if (updates.status === 'in_progress') {
         action = 'accept';
+        notificationMessage = 'Request accepted successfully! 🎉';
       } else if (updates.status === 'rejected') {
         action = 'decline';
+        notificationMessage = 'Request declined.';
       } else if (updates.status === 'completed') {
         action = 'complete';
+        notificationMessage = 'Service completed! Invoice generated. 📄';
       }
 
       if (!action) {
@@ -442,11 +452,15 @@ function App() {
         throw new Error(getApiErrorMessage(response, data, 'Unable to update service request.'));
       }
 
+      // Show success notification
+      showNotification(notificationMessage, 'success');
+
       if (currentUser?.sp_id) {
         await fetchProviderRequests(currentUser.sp_id);
       }
     } catch (err) {
       console.error(err.message || err);
+      showNotification('Error updating request. Please try again.', 'error');
     }
   };
 
@@ -508,6 +522,13 @@ function App() {
 
   return (
     <>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
+        />
+      )}
       <div className="shell">
         <div className="phone">
           <div className="topbar">

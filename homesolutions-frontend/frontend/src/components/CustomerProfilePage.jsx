@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import MessagingPanel from './MessagingPanel';
+import { useUnreadMessages } from '../hooks/useUnreadMessages';
 
 function formatCurrency(amount) {
   const value = Number(amount || 0);
@@ -45,6 +46,9 @@ function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onReq
   const [phone, setPhone] = useState(currentUser.phone || '');
   const [location, setLocation] = useState(currentUser.location || '');
   const [saveMessage, setSaveMessage] = useState('');
+
+  // Fetch unread message counts
+  const { unreadCounts } = useUnreadMessages(currentUser?.user_id, true);
 
   const displayPhoto = useMemo(() => {
     if (profilePhoto) {
@@ -224,13 +228,16 @@ function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onReq
               <button
                 type="button"
                 className="btn-s"
-                style={{ marginTop: '12px', width: '100%' }}
+                style={{ marginTop: '12px', width: '100%', position: 'relative' }}
                 onClick={() => {
                   setMessagingRequestId(request.requestId);
                   setMessagingProviderName(request.providerName);
                 }}
               >
                 Message Provider
+                {unreadCounts[request.requestId] > 0 && (
+                  <span className="notification-badge">{unreadCounts[request.requestId]}</span>
+                )}
               </button>
             </article>
           );
