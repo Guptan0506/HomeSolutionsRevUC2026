@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const { Pool } = require('pg');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -33,6 +34,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const CHAT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const CHAT_RATE_LIMIT_MAX_REQUESTS = 12;
 const MAX_CHAT_MESSAGE_LENGTH = 1000;
+const REQUEST_ID_HEADER = 'x-request-id';
 
 const ensureStripeConfigured = (res) => {
   if (!stripe) {
@@ -86,6 +88,7 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
+<<<<<<< Updated upstream
 // Stripe webhook must receive raw bytes for signature verification.
 app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
 
@@ -96,6 +99,40 @@ app.use((req, res, next) => {
   }
 
   return jsonParser(req, res, next);
+=======
+app.use(express.json({
+  limit: '1mb',
+  verify: (req, _res, buf) => {
+    if (req.originalUrl === '/api/webhooks/stripe') {
+      req.rawBody = buf;
+    }
+  },
+})); // Limit JSON payload size
+
+app.use((req, res, next) => {
+  const incoming = req.headers[REQUEST_ID_HEADER];
+  const requestId = typeof incoming === 'string' && incoming.trim()
+    ? incoming.trim()
+    : crypto.randomUUID();
+
+  req.requestId = requestId;
+  res.setHeader(REQUEST_ID_HEADER, requestId);
+
+  const startMs = Date.now();
+  res.on('finish', () => {
+    const durationMs = Date.now() - startMs;
+    console.log(JSON.stringify({
+      level: 'info',
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs,
+    }));
+  });
+
+  next();
+>>>>>>> Stashed changes
 });
 
 // Rate Limiters for critical endpoints
@@ -128,6 +165,15 @@ pool.connect()
   .catch((err) => {
     console.error('Database connection failed:', err.message || err);
   });
+
+app.get('/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    return res.status(200).json({ status: 'ok', db: 'ok', uptimeSec: process.uptime() });
+  } catch (err) {
+    return res.status(503).json({ status: 'degraded', db: 'down', error: err.message || String(err) });
+  }
+});
 
 const initializeAuthTable = async () => {
   try {
@@ -462,6 +508,87 @@ const initializeModerationTables = async () => {
   }
 };
 
+<<<<<<< Updated upstream
+=======
+initializeModerationTables();
+
+const initializeOperationsTables = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS webhook_events (
+        event_id TEXT PRIMARY KEY,
+        event_type VARCHAR(120) NOT NULL,
+        processed BOOLEAN DEFAULT FALSE,
+        processed_at TIMESTAMP,
+        payload JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payout_attempts (
+        attempt_id SERIAL PRIMARY KEY,
+        invoice_id INTEGER REFERENCES invoices(invoice_id) ON DELETE CASCADE,
+        sp_id INTEGER REFERENCES service_provider(sp_id) ON DELETE SET NULL,
+        amount DECIMAL(12, 2) NOT NULL,
+        stripe_transfer_id TEXT,
+        status VARCHAR(30) NOT NULL,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS notification_events (
+        notification_id SERIAL PRIMARY KEY,
+        event_type VARCHAR(120) NOT NULL,
+        recipient_user_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL,
+        recipient_email TEXT,
+        status VARCHAR(20) DEFAULT 'queued',
+        provider VARCHAR(20) DEFAULT 'email',
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS verification_audit_logs (
+        audit_id SERIAL PRIMARY KEY,
+        sp_id INTEGER REFERENCES service_provider(sp_id) ON DELETE CASCADE,
+        actor_user_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL,
+        action_type VARCHAR(50) NOT NULL,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS connected_account_id TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS webhook_events_processed_idx ON webhook_events (processed)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS payout_attempts_invoice_idx ON payout_attempts (invoice_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS notification_events_created_idx ON notification_events (created_at)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS verification_audit_logs_sp_idx ON verification_audit_logs (sp_id)`);
+
+    console.log('Operations tables ready.');
+  } catch (err) {
+    console.error('Failed to initialize operations tables:', err.message || err);
+  }
+};
+
+initializeOperationsTables();
+
+const logNotificationEvent = async ({ eventType, recipientUserId, recipientEmail, status = 'queued', provider = 'email', metadata = {} }) => {
+  try {
+    await pool.query(
+      `INSERT INTO notification_events (event_type, recipient_user_id, recipient_email, status, provider, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [eventType, recipientUserId || null, recipientEmail || null, status, provider, JSON.stringify(metadata || {})]
+    );
+  } catch (err) {
+    console.error('Notification log error:', err.message || err);
+  }
+};
+
+>>>>>>> Stashed changes
 const calculateBadgeLevel = (trustScore, verificationStatus) => {
   if (verificationStatus !== 'verified') {
     return 'new';
@@ -518,6 +645,7 @@ const recalculateProviderTrustScore = async (providerId) => {
   return { trustScore, badgeLevel };
 };
 
+<<<<<<< Updated upstream
 async function resolveServiceRequestUserColumn() {
   const result = await pool.query(
     `SELECT column_name
@@ -539,6 +667,20 @@ async function resolveServiceRequestUserColumn() {
 
   return null;
 }
+=======
+const isValidDocumentUrl = (value) => {
+  if (!value) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(String(value));
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+};
+>>>>>>> Stashed changes
 
 // Auth middleware: requires a user identifier in params, body, or x-user-id header
 function requireAuth(req, res, next) {
@@ -1018,43 +1160,51 @@ app.get('/api/providers/search/near', async (req, res) => {
 
     // Haversine distance formula in SQL (results in miles)
     let query = `
-      SELECT 
-        sp.*,
-        ROUND(
-          ( 3959 * acos( 
-            cos( radians($1) ) * cos( radians( latitude ) ) * 
-            cos( radians( longitude ) - radians($2) ) + 
-            sin( radians($1) ) * sin( radians( latitude ) ) 
-          ) )::NUMERIC, 
-          2
-        ) AS distance_miles
-      FROM service_provider
-      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-        AND is_suspended = FALSE
+      SELECT *
+      FROM (
+        SELECT 
+          sp.*,
+          ROUND(
+            ( 3959 * acos( 
+              cos( radians($1) ) * cos( radians( latitude ) ) * 
+              cos( radians( longitude ) - radians($2) ) + 
+              sin( radians($1) ) * sin( radians( latitude ) ) 
+            ) )::NUMERIC,
+            2
+          ) AS distance_miles,
+          (
+            (100 - LEAST(100, (3959 * acos( 
+              cos( radians($1) ) * cos( radians( latitude ) ) * 
+              cos( radians( longitude ) - radians($2) ) + 
+              sin( radians($1) ) * sin( radians( latitude ) )
+            )) * 2)) * 0.40 +
+            COALESCE(sp.trust_score, 0) * 0.30 +
+            COALESCE(sp.average_rating, 0) * 10 * 0.20 +
+            COALESCE(sp.acceptance_rate, 0) * 0.10
+          ) AS discovery_score
+        FROM service_provider sp
+        WHERE sp.latitude IS NOT NULL
+          AND sp.longitude IS NOT NULL
+          AND sp.is_suspended = FALSE
+      ) ranked
+      WHERE ranked.distance_miles < $3
     `;
 
-    const params = [lat, lng];
+    const params = [lat, lng, maxDistance];
 
     // Filter by service type if provided
     if (serviceType && serviceType.trim()) {
       query += ` AND (
-        LOWER(specialization) LIKE LOWER($${params.length + 1}) OR 
-        LOWER(services) LIKE LOWER($${params.length + 1})
+        LOWER(ranked.specialization) LIKE LOWER($${params.length + 1}) OR
+        LOWER(ranked.services) LIKE LOWER($${params.length + 1})
       )`;
       params.push(`%${serviceType}%`);
     }
 
-    query += ` HAVING (
-      3959 * acos( 
-        cos( radians($1) ) * cos( radians( latitude ) ) * 
-        cos( radians( longitude ) - radians($2) ) + 
-        sin( radians($1) ) * sin( radians( latitude ) ) 
-      )
-    ) < $${params.length + 1}
-    ORDER BY distance_miles ASC
-    LIMIT 100`;
-
-    params.push(maxDistance);
+    query += `
+      ORDER BY ranked.discovery_score DESC, ranked.distance_miles ASC
+      LIMIT 100
+    `;
 
     const result = await pool.query(query, params);
     res.json({
@@ -1085,7 +1235,7 @@ app.put('/api/providers/:spId/location', requireAuth, async (req, res) => {
       return res.status(404).json({ message: 'Provider not found' });
     }
 
-    if (providerResult.rows[0].user_id !== userId) {
+    if (Number(providerResult.rows[0].user_id) !== Number(userId)) {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
@@ -2660,7 +2810,7 @@ app.post('/api/invoices/:invoiceId/create-payment-intent', requireAuth, async (r
     const invoice = invoiceResult.rows[0];
 
     // Verify user owns this invoice
-    if (invoice.user_id !== userId) {
+    if (Number(invoice.user_id) !== Number(userId)) {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
@@ -2733,7 +2883,7 @@ app.post('/api/invoices/:invoiceId/confirm-payment', requireAuth, async (req, re
     const invoice = invoiceResult.rows[0];
 
     // Verify user owns this invoice
-    if (invoice.user_id !== userId) {
+    if (Number(invoice.user_id) !== Number(userId)) {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
@@ -2748,13 +2898,20 @@ app.post('/api/invoices/:invoiceId/confirm-payment', requireAuth, async (req, re
       await pool.query(
         `UPDATE invoices 
          SET payment_status = $1, 
-             stripe_charge_id = $2,
+             stripe_charge_id = COALESCE($2, stripe_charge_id),
              paid_at = CURRENT_TIMESTAMP,
              provider_payout_amount = $3,
              payout_status = 'pending'
          WHERE invoice_id = $4`,
-        ['completed', paymentIntent.charges.data[0].id, providerPayoutAmount, invoiceId]
+        ['completed', paymentIntent.latest_charge || null, providerPayoutAmount, invoiceId]
       );
+
+      await logNotificationEvent({
+        eventType: 'payment_completed',
+        recipientUserId: userId,
+        status: 'sent',
+        metadata: { invoiceId: Number(invoiceId), paymentIntentId },
+      });
 
       res.json({
         success: true,
@@ -2793,7 +2950,7 @@ app.get('/api/invoices/:invoiceId/payment-status', requireAuth, async (req, res)
       [invoiceId]
     );
 
-    if (ownerCheck.rows[0].user_id !== userId) {
+    if (Number(ownerCheck.rows[0].user_id) !== Number(userId)) {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
@@ -2818,6 +2975,7 @@ app.post('/api/webhooks/stripe', async (req, res) => {
     let event;
 
     if (endpointSecret) {
+<<<<<<< Updated upstream
       if (!ensureStripeConfigured(res)) {
         return;
       }
@@ -2825,7 +2983,22 @@ app.post('/api/webhooks/stripe', async (req, res) => {
       event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
     } else {
       event = JSON.parse(req.body.toString('utf8'));
+=======
+      event = stripe.webhooks.constructEvent(req.rawBody, sig, endpointSecret);
+    } else {
+      event = req.body;
+>>>>>>> Stashed changes
     }
+
+    const existingEvent = await pool.query('SELECT event_id FROM webhook_events WHERE event_id = $1', [event.id]);
+    if (existingEvent.rows.length > 0) {
+      return res.status(200).json({ received: true, duplicate: true });
+    }
+
+    await pool.query(
+      'INSERT INTO webhook_events (event_id, event_type, processed, payload) VALUES ($1, $2, $3, $4)',
+      [event.id, event.type, false, JSON.stringify(event)]
+    );
 
     // Handle webhook events
     if (event.type === 'payment_intent.succeeded') {
@@ -2845,13 +3018,19 @@ app.post('/api/webhooks/stripe', async (req, res) => {
           await pool.query(
             `UPDATE invoices 
              SET payment_status = $1, 
-                 stripe_charge_id = $2,
+                 stripe_charge_id = COALESCE($2, stripe_charge_id),
                  paid_at = CURRENT_TIMESTAMP,
                  provider_payout_amount = $3,
                  payout_status = 'pending'
              WHERE invoice_id = $4`,
-            ['completed', paymentIntent.charges[0].id, providerPayoutAmount, invoiceId]
+            ['completed', paymentIntent.latest_charge || null, providerPayoutAmount, invoiceId]
           );
+
+          await logNotificationEvent({
+            eventType: 'payment_completed_webhook',
+            status: 'sent',
+            metadata: { invoiceId: Number(invoiceId), eventId: event.id },
+          });
         }
       }
     } else if (event.type === 'payment_intent.payment_failed') {
@@ -2863,8 +3042,19 @@ app.post('/api/webhooks/stripe', async (req, res) => {
           'UPDATE invoices SET payment_status = $1 WHERE invoice_id = $2',
           ['failed', invoiceId]
         );
+
+        await logNotificationEvent({
+          eventType: 'payment_failed_webhook',
+          status: 'sent',
+          metadata: { invoiceId: Number(invoiceId), eventId: event.id },
+        });
       }
     }
+
+    await pool.query(
+      'UPDATE webhook_events SET processed = TRUE, processed_at = CURRENT_TIMESTAMP WHERE event_id = $1',
+      [event.id]
+    );
 
     res.status(200).json({ received: true });
   } catch (err) {
@@ -2881,8 +3071,9 @@ app.get('/api/admin/pending-payouts', requireAuth, requireAdmin, async (req, res
         i.invoice_id,
         i.request_id,
         i.sp_id,
-        sp.business_name,
-        sp.primary_contact_email,
+        sp.sp_name as business_name,
+        sp.sp_email as primary_contact_email,
+        sp.connected_account_id,
         i.total_amount,
         i.provider_payout_amount,
         i.payment_status,
@@ -2916,7 +3107,10 @@ app.post('/api/admin/process-payout', requireAuth, requireAdmin, async (req, res
 
     // Get invoice details
     const invoiceResult = await pool.query(
-      'SELECT * FROM invoices WHERE invoice_id = $1',
+      `SELECT i.*, sp.connected_account_id
+       FROM invoices i
+       LEFT JOIN service_provider sp ON sp.sp_id = i.sp_id
+       WHERE i.invoice_id = $1`,
       [invoiceId]
     );
 
@@ -2930,19 +3124,60 @@ app.post('/api/admin/process-payout', requireAuth, requireAdmin, async (req, res
       return res.status(400).json({ message: 'Invoice not eligible for payout' });
     }
 
-    // Create payout to provider via Stripe (connected account)
-    // For MVP, we'll just mark as processing
+    let transferId = null;
+    let payoutStatus = 'processed';
+    let payoutError = null;
+
+    if (invoice.connected_account_id && process.env.STRIPE_SECRET_KEY) {
+      try {
+        const transfer = await stripe.transfers.create({
+          amount: Math.round(Number(invoice.provider_payout_amount || 0) * 100),
+          currency: 'usd',
+          destination: invoice.connected_account_id,
+          metadata: {
+            invoiceId: String(invoiceId),
+            spId: String(invoice.sp_id || ''),
+          },
+        });
+
+        transferId = transfer.id;
+      } catch (transferErr) {
+        payoutStatus = 'failed';
+        payoutError = transferErr.message || 'Stripe transfer failed';
+      }
+    }
+
     const result = await pool.query(
-      `UPDATE invoices 
-       SET payout_status = $1, payout_date = CURRENT_TIMESTAMP 
+      `UPDATE invoices
+       SET payout_status = $1,
+           payout_date = CURRENT_TIMESTAMP
        WHERE invoice_id = $2
        RETURNING *`,
-      ['processed', invoiceId]
+      [payoutStatus, invoiceId]
     );
 
+    await pool.query(
+      `INSERT INTO payout_attempts (invoice_id, sp_id, amount, stripe_transfer_id, status, error_message)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [invoice.invoice_id, invoice.sp_id, invoice.provider_payout_amount, transferId, payoutStatus, payoutError]
+    );
+
+    await logNotificationEvent({
+      eventType: 'payout_processed',
+      status: payoutStatus === 'processed' ? 'sent' : 'failed',
+      metadata: {
+        invoiceId: Number(invoiceId),
+        spId: Number(invoice.sp_id || 0),
+        stripeTransferId: transferId,
+        error: payoutError,
+      },
+    });
+
     res.json({
-      message: 'Payout processed successfully',
+      message: payoutStatus === 'processed' ? 'Payout processed successfully' : 'Payout failed. Retry after fixing provider Stripe account.',
       invoice: result.rows[0],
+      stripeTransferId: transferId,
+      error: payoutError,
     });
   } catch (err) {
     console.error('Process payout error:', err);
