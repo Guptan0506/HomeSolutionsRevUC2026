@@ -503,6 +503,18 @@ body {
   font-weight: 500;
 }
 
+.provider-discovery-controls {
+  margin-bottom: 20px;
+  padding: 16px;
+  background-color: #f8fbff;
+  border: 1px solid #d3e2f1;
+  border-radius: 12px;
+}
+
+.discovery-search {
+  margin-bottom: 12px;
+}
+
 .provider-selection-grid {
   display: grid;
   gap: 20px;

@@ -25,6 +25,9 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('name'); // 'name', 'rating', 'price', 'experience'
+  const [minRating, setMinRating] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -73,19 +76,69 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
   }, [customerLocation]);
 
   const visibleProviders = useMemo(() => {
-    if (!selectedService) {
-      return providers;
+    let filtered = [...providers];
+
+    // Filter by service selection
+    if (selectedService) {
+      const normalizedService = selectedService.toLowerCase();
+      filtered = filtered.filter((provider) => {
+        const specialization = String(provider.specialization || provider.service_type || '').toLowerCase();
+        const listedServices = String(provider.services || provider.sp_services || '').toLowerCase();
+        return specialization.includes(normalizedService) || listedServices.includes(normalizedService);
+      });
+      if (filtered.length === 0) {
+        filtered = [...providers];
+      }
     }
 
-    const normalizedService = selectedService.toLowerCase();
-    const filtered = providers.filter((provider) => {
-      const specialization = String(provider.specialization || provider.service_type || '').toLowerCase();
-      const listedServices = String(provider.services || provider.sp_services || '').toLowerCase();
-      return specialization.includes(normalizedService) || listedServices.includes(normalizedService);
+    // Filter by search query (name + service)
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter((provider) => {
+        const name = String(provider.sp_name || provider.full_name || '').toLowerCase();
+        const specialization = String(provider.specialization || provider.service_type || '').toLowerCase();
+        const services = String(provider.services || provider.sp_services || '').toLowerCase();
+        return name.includes(query) || specialization.includes(query) || services.includes(query);
+      });
+    }
+
+    // Filter by minimum rating
+    filtered = filtered.filter((provider) => {
+      const rating = Number(provider.average_rating || 0);
+      return rating >= minRating;
     });
 
-    return filtered.length > 0 ? filtered : providers;
-  }, [providers, selectedService]);
+    // Sort
+    const sortedProviders = [...filtered];
+    if (sortBy === 'rating') {
+      sortedProviders.sort((a, b) => {
+        const ratingA = Number(a.average_rating || 0);
+        const ratingB = Number(b.average_rating || 0);
+        return ratingB - ratingA; // Highest first
+      });
+    } else if (sortBy === 'price') {
+      sortedProviders.sort((a, b) => {
+        const priceA = Number(a.hourly_charge || a.hourly_rate || 0);
+        const priceB = Number(b.hourly_charge || b.hourly_rate || 0);
+        return priceA - priceB; // Lowest first
+      });
+    } else if (sortBy === 'experience') {
+      sortedProviders.sort((a, b) => {
+        const expA = Number(a.experience_years || a.experience || 0);
+        const expB = Number(b.experience_years || b.experience || 0);
+        return expB - expA; // Most experience first
+      });
+    } else {
+      // Default: sort by name
+      sortedProviders.sort((a, b) => {
+        const nameA = String(a.sp_name || a.full_name || '').toLowerCase();
+        const nameB = String(b.sp_name || b.full_name || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+    }
+
+    return sortedProviders;
+  }, [providers, selectedService, searchQuery, sortBy, minRating]);
 
   return (
     <section className="section-wrap provider-selection-wrap">
@@ -96,6 +149,59 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
       {customerLocation && (
         <div className="location-badge">
           Your area: <strong>{customerLocation}</strong>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div className="provider-discovery-controls">
+          <div className="discovery-search">
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Search by name or specialty..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ width: '100%', padding: '10px', borderRadius: '8px', marginBottom: '12px' }}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <label className="field-label" style={{ display: 'block', marginBottom: '6px' }}>Sort by</label>
+              <select
+                className="input-field"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px' }}
+              >
+                <option value="name">Name (A-Z)</option>
+                <option value="rating">Highest Rating</option>
+                <option value="price">Lowest Price</option>
+                <option value="experience">Most Experience</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="field-label" style={{ display: 'block', marginBottom: '6px' }}>Min. Rating</label>
+              <select
+                className="input-field"
+                value={minRating}
+                onChange={(e) => setMinRating(Number(e.target.value))}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px' }}
+              >
+                <option value={0}>All ratings</option>
+                <option value={3}>3+ stars</option>
+                <option value={4}>4+ stars</option>
+                <option value={4.5}>4.5+ stars</option>
+              </select>
+            </div>
+          </div>
+
+          {visibleProviders.length > 0 && (
+            <p style={{ fontSize: '13px', color: 'var(--ink-500)', marginBottom: '12px' }}>
+              Showing {visibleProviders.length} of {providers.length} provider{providers.length !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
       )}
 
@@ -141,7 +247,12 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
                 </div>
 
                 <p className="provider-selection-meta"><strong>Experience:</strong> {getExperience(provider)}</p>
-                <p className="provider-selection-meta"><strong>Rating:</strong> {getProviderRating(provider)} / 5</p>
+                <p className="provider-selection-meta">
+                  <strong>Rating:</strong> {Number(provider.average_rating || 0).toFixed(1)} / 5 ⭐
+                </p>
+                <p className="provider-selection-meta">
+                  <strong>Acceptance Rate:</strong> {Number(provider.acceptance_rate || 0).toFixed(0)}%
+                </p>
                 <p className="provider-selection-meta"><strong>Availability:</strong> {providerAvailability}</p>
 
                 <button

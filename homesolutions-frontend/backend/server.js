@@ -145,6 +145,8 @@ const initializeServiceProviderTable = async () => {
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS services TEXT`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS profile_picture_url TEXT`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS average_rating DECIMAL(3, 2) DEFAULT 0`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS acceptance_rate DECIMAL(5, 2) DEFAULT 0`);
     await pool.query(`ALTER TABLE service_provider ALTER COLUMN sp_services DROP NOT NULL`);
     await pool.query(`ALTER TABLE service_provider ALTER COLUMN profile_picture_url DROP NOT NULL`);
 
@@ -628,12 +630,23 @@ app.get('/api/providers', async (req, res) => {
     const result = await pool.query(
       `SELECT
          sp.*,
-         COALESCE(NULLIF(sp.profile_picture_url, ''), au.profile_photo) AS provider_photo
+         COALESCE(NULLIF(sp.profile_picture_url, ''), au.profile_photo) AS provider_photo,
+         COALESCE(
+           ROUND(AVG(CASE WHEN sr.customer_rating > 0 THEN sr.customer_rating END)::numeric, 1),
+           0
+         ) AS average_rating,
+         COALESCE(
+           ROUND((CAST(COUNT(CASE WHEN sr.status IN ('accepted', 'in_progress', 'completed') THEN 1 END) AS NUMERIC) / 
+           NULLIF(COUNT(CASE WHEN sr.status != 'pending' THEN 1 END), 0) * 100)::numeric, 0),
+           0
+         ) AS acceptance_rate
        FROM service_provider sp
        LEFT JOIN app_users au
          ON au.user_id = sp.user_id
          OR LOWER(COALESCE(au.email, '')) = LOWER(COALESCE(sp.sp_email, ''))
+       LEFT JOIN service_requests sr ON sr.sp_id = sp.sp_id
        WHERE ${filters.join(' AND ')}
+       GROUP BY sp.sp_id, au.user_id, au.profile_photo, sp.profile_picture_url
        ORDER BY sp.sp_name ASC`,
       params
     );
