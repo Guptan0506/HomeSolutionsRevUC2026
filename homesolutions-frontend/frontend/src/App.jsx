@@ -12,7 +12,7 @@ import ServiceProviderProfilePage from "./components/ServiceProviderProfilePage"
 import ServiceInvoicePage from "./components/ServiceInvoicePage";
 import TroubleshootChatbot from "./components/TroubleshootChatbot";
 import Toast from "./components/Toast";
-import { buildApiUrl, getApiErrorMessage, readJsonSafely } from "./api";
+import { buildApiUrl, getApiErrorMessage, readJsonSafely, setAuthToken, clearAuthToken, getAuthToken } from "./api";
 
 const featuredProfessionals = [
   {
@@ -301,7 +301,12 @@ function App() {
     openAuth('login', 'profile');
   };
 
-  const handleAuthSuccess = (user) => {
+  const handleAuthSuccess = (user, token, expiresAt) => {
+    // Store JWT token if provided
+    if (token && expiresAt) {
+      setAuthToken(token, expiresAt);
+    }
+    
     setCurrentUser(user);
     localStorage.setItem('hs_user', JSON.stringify(user));
     const nextScreen = user?.user_role === 'service_provider' ? 'profile' : postAuthScreen;
@@ -311,6 +316,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('hs_user');
+    clearAuthToken(); // Clear JWT token
     setCurrentUser(null);
     setAuthMode('login');
     setCurrentScreen('home');

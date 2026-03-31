@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const { Pool } = require('pg');
 const cors = require('cors');
+const helmet = require('helmet');
 const bcrypt = require('bcryptjs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const {
@@ -11,6 +12,15 @@ const {
   notifyServiceCompleted,
   notifyNewMessage,
 } = require('./notificationService');
+const {
+  validatePassword,
+  generateToken,
+  verifyToken,
+  sanitizeInput,
+  extractTokenFromHeader,
+  isValidEmail,
+} = require('./securityUtils');
+const { createRateLimiter } = require('./rateLimiter');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
@@ -52,9 +62,26 @@ RULES:
 6. Always include a safety reminder
 7. For dangerous issues, recommend professional help strongly`;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Security Middleware
+app.use(helmet()); // Add security headers
+
+// CORS Configuration
+const corsOptions = {
+  origin: (process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:5173').split(','),
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+};
+app.use(cors(corsOptions));
+
+app.use(express.json({ limit: '1mb' })); // Limit JSON payload size
+
+// Rate Limiters for critical endpoints
+const authRateLimiter = createRateLimiter({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
+  maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 5, // 5 requests per window
+  keyPrefix: 'auth_',
+});
 
 // PostgreSQL Connection
 const dbHost = process.env.DB_HOST || 'localhost';
@@ -332,14 +359,26 @@ initializeMessagesTable();
 
 // Auth middleware: requires a user identifier in params, body, or x-user-id header
 function requireAuth(req, res, next) {
-  const userId =
-    req.params?.user_id ||
-    req.params?.sp_id ||
-    req.body?.user_id ||
-    req.headers['x-user-id'];
-  if (!userId) {
-    return res.status(401).json({ message: 'Authentication required.' });
+  // Accept token from:
+  // 1. Authorization header: "Bearer <token>"
+  // 2. x-auth-token header
+  // 3. Query parameter (for GET requests only - not recommended)
+  
+  let token = extractTokenFromHeader(req.headers.authorization);
+  token = token || req.headers['x-auth-token'];
+  token = token || (req.method === 'GET' ? req.query.token : null);
+
+  if (!token) {
+    return res.status(401).json({ message: 'Authentication token required. Use Authorization: Bearer <token> header.' });
   }
+
+  const decoded = verifyToken(token);
+  if (!decoded) {
+    return res.status(401).json({ message: 'Invalid or expired authentication token.' });
+  }
+
+  // Attach decoded token info to request for use in route handlers
+  req.user = decoded;
   next();
 }
 
@@ -390,7 +429,7 @@ function getGeminiModel() {
 }
 
 // POST create a user account
-app.post('/api/auth/signup', async (req, res) => {
+app.post('/api/auth/signup', authRateLimiter.middleware(), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -413,13 +452,23 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ message: 'fullName, email, password, and userRole are required.' });
     }
 
+    // Validate email format
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: 'Invalid email address.' });
+    }
+
+    // Validate password meets security requirements
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({
+        message: 'Password does not meet security requirements.',
+        requirements: passwordValidation.errors,
+      });
+    }
+
     const validRoles = ['customer', 'service_provider'];
     if (!validRoles.includes(userRole)) {
       return res.status(400).json({ message: 'userRole must be "customer" or "service_provider".' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
     }
 
     // For service providers, require profile information
@@ -554,8 +603,14 @@ app.post('/api/auth/signup', async (req, res) => {
 
     await client.query('COMMIT');
 
+    // Generate JWT token for newly created user
+    const { token, expiresAt, expiresInSeconds } = generateToken(user.user_id, user.email, user.user_role);
+
     return res.status(201).json({
       message: 'Account created successfully.',
+      token,
+      expiresAt,
+      expiresInSeconds,
       user,
     });
   } catch (err) {
@@ -568,7 +623,8 @@ app.post('/api/auth/signup', async (req, res) => {
 });
 
 // POST login with email/password
-app.post('/api/auth/login', async (req, res) => {
+// POST login endpoint with JWT token generation
+app.post('/api/auth/login', authRateLimiter.middleware(), async (req, res) => {
   try {
     const { email, password, userRole } = req.body;
 
@@ -632,8 +688,14 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
+    // Generate JWT token
+    const { token, expiresAt, expiresInSeconds } = generateToken(user.user_id, user.email, user.user_role);
+
     return res.json({
       message: 'Login successful.',
+      token,
+      expiresAt,
+      expiresInSeconds,
       user: {
         user_id: user.user_id,
         full_name: user.full_name,

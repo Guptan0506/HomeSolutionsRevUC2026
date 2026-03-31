@@ -122,7 +122,8 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
         throw new Error('Unexpected response from server.');
       }
 
-      onSignupSuccess(data.user);
+      // Pass token and expiry to onSignupSuccess
+      onSignupSuccess(data.user, data.token, data.expiresAt);
     } catch (err) {
       setError(err.message || 'Unable to create account right now.');
     } finally {

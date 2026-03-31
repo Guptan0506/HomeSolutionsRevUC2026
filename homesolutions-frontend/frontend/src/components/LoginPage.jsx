@@ -30,7 +30,8 @@ function LoginPage({ onLoginSuccess, onSwitchToSignup }) {
         throw new Error('Unexpected response from server.');
       }
 
-      onLoginSuccess(data.user);
+      // Pass token and expiry to onLoginSuccess
+      onLoginSuccess(data.user, data.token, data.expiresAt);
     } catch (err) {
       setError(err.message || 'Unable to login right now.');
     } finally {

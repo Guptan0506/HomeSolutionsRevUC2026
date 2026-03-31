@@ -43,9 +43,12 @@ homesolutions-frontend/
 There is no React Router. Navigation is state-driven: `App.jsx` holds a `currentScreen` state string and conditionally renders components. All navigation is done by calling setter functions passed down as props.
 
 ### Authentication
-- User logs in/registers → backend returns user object → stored in `localStorage` as `currentUser`
-- `user_role` field (`"customer"` or `"service_provider"`) determines which UI flow is shown
-- No JWT tokens — the user object is trusted from localStorage
+- User logs in/registers → backend generates JWT token and returns it
+- JWT token stored in localStorage with expiry timestamp
+- Token sent in `Authorization: Bearer <token>` header on all protected requests
+- Token expires after 7 days (configurable via `JWT_EXPIRY` env var)
+- `requireAuth` middleware validates token signature and expiry
+- Password complexity enforced: 10+ chars, 1 uppercase, 1 number, 1 special char
 
 ### API Layer
 - In dev, Vite proxies `/api/*` to `http://localhost:5001` (or `VITE_PROXY_TARGET` env var)
@@ -93,3 +96,25 @@ All styles live in `frontend/src/components/App.css`. Key design tokens (CSS var
 **Hero layout:** Split two-column — `1.png` fills `.hero-image-panel` (left, 42%), text/stats in `.hero-content` (right). Collapses to single column on mobile.
 
 **Typography targets:** body 15px minimum, headings 28px–48px, subheadings 18px–22px, labels 13px.
+
+## Security (Phase 4)
+
+See [SECURITY.md](./SECURITY.md) for comprehensive security documentation.
+
+**Key Features:**
+- JWT token-based authentication (7-day expiry)
+- Strong password requirements (10+ chars, upper/number/special)
+- Rate limiting on auth endpoints (5 attempts per 15 min)
+- Security headers via Helmet.js
+- CORS whitelisting
+- Input validation & SQL injection prevention
+- Token auto-expiry checking on frontend
+
+**Environment Variables (Security):**
+```
+JWT_SECRET=your-32-character-secret-key
+JWT_EXPIRY=7d
+CORS_ALLOWED_ORIGINS=https://yourdomain.com
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=5
+```
