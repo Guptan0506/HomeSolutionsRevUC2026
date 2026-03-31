@@ -10,7 +10,7 @@ export default function Toast({ message, type = 'info', onDismiss }) {
   useEffect(() => {
     const timer = setTimeout(onDismiss, 4000);
     return () => clearTimeout(timer);
-  }, [onDismiss]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toastClass = `toast toast-${type}`;
 
