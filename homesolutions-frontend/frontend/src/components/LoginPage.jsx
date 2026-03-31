@@ -63,6 +63,13 @@ function LoginPage({ onLoginSuccess, onSwitchToSignup }) {
             >
               Service Provider
             </button>
+            <button
+              type="button"
+              className={`role-btn ${selectedRole === 'admin' ? 'active' : ''}`}
+              onClick={() => setSelectedRole('admin')}
+            >
+              Admin
+            </button>
           </div>
         </div>
 

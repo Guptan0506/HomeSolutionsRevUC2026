@@ -21,8 +21,10 @@ const {
   isValidEmail,
 } = require('./securityUtils');
 const { createRateLimiter } = require('./rateLimiter');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || '');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+const stripeSecretKey = (process.env.STRIPE_SECRET_KEY || '').trim();
+const stripe = stripeSecretKey ? require('stripe')(stripeSecretKey) : null;
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -31,6 +33,15 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const CHAT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const CHAT_RATE_LIMIT_MAX_REQUESTS = 12;
 const MAX_CHAT_MESSAGE_LENGTH = 1000;
+
+const ensureStripeConfigured = (res) => {
+  if (!stripe) {
+    res.status(503).json({ message: 'Payments are not configured. Set STRIPE_SECRET_KEY on backend.' });
+    return false;
+  }
+
+  return true;
+};
 
 const troubleshootRateLimitStore = new Map();
 let geminiModel = null;
@@ -75,7 +86,17 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-app.use(express.json({ limit: '1mb' })); // Limit JSON payload size
+// Stripe webhook must receive raw bytes for signature verification.
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
+
+const jsonParser = express.json({ limit: '1mb' });
+app.use((req, res, next) => {
+  if (req.path === '/api/webhooks/stripe') {
+    return next();
+  }
+
+  return jsonParser(req, res, next);
+});
 
 // Rate Limiters for critical endpoints
 const authRateLimiter = createRateLimiter({
@@ -99,13 +120,14 @@ const pool = new Pool({
 });
 
 // Test database connection
-pool.connect((err) => {
-  if (err) {
-    console.error('Database connection failed:', err.message || err);
-  } else {
+pool.connect()
+  .then((client) => {
     console.log('Connected to HomeServices database!');
-  }
-});
+    client.release();
+  })
+  .catch((err) => {
+    console.error('Database connection failed:', err.message || err);
+  });
 
 const initializeAuthTable = async () => {
   try {
@@ -142,6 +164,7 @@ const initializeAuthTable = async () => {
     console.log('Auth table ready (app_users).');
   } catch (err) {
     console.error('Failed to initialize auth table:', err.message || err);
+    throw err;
   }
 };
 
@@ -211,6 +234,7 @@ const initializeServiceProviderTable = async () => {
     console.log('Service Provider table ready.');
   } catch (err) {
     console.error('Failed to initialize service provider table:', err.message || err);
+    throw err;
   }
 };
 
@@ -290,6 +314,7 @@ const initializeServiceRequestsTable = async () => {
     console.log('Service requests table ready.');
   } catch (err) {
     console.error('Failed to initialize service requests table:', err.message || err);
+    throw err;
   }
 };
 
@@ -361,13 +386,9 @@ const initializeInvoicesTable = async () => {
     console.log('Invoices table ready with payment tracking.');
   } catch (err) {
     console.error('Failed to initialize invoices table:', err.message || err);
+    throw err;
   }
 };
-
-initializeAuthTable();
-initializeServiceProviderTable();
-initializeServiceRequestsTable();
-initializeInvoicesTable();
 
 const initializeMessagesTable = async () => {
   try {
@@ -398,10 +419,9 @@ const initializeMessagesTable = async () => {
     console.log('Messages table ready.');
   } catch (err) {
     console.error('Failed to initialize messages table:', err.message || err);
+    throw err;
   }
 };
-
-initializeMessagesTable();
 
 // Phase 6: Moderation Tables
 const initializeModerationTables = async () => {
@@ -438,10 +458,9 @@ const initializeModerationTables = async () => {
     console.log('Moderation tables ready.');
   } catch (err) {
     console.error('Failed to initialize moderation tables:', err.message || err);
+    throw err;
   }
 };
-
-initializeModerationTables();
 
 const calculateBadgeLevel = (trustScore, verificationStatus) => {
   if (verificationStatus !== 'verified') {
@@ -498,6 +517,28 @@ const recalculateProviderTrustScore = async (providerId) => {
 
   return { trustScore, badgeLevel };
 };
+
+async function resolveServiceRequestUserColumn() {
+  const result = await pool.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'service_requests'
+       AND column_name IN ('user_id', 'customer_id')`
+  );
+
+  const names = new Set(result.rows.map((row) => row.column_name));
+
+  if (names.has('user_id')) {
+    return 'user_id';
+  }
+
+  if (names.has('customer_id')) {
+    return 'customer_id';
+  }
+
+  return null;
+}
 
 // Auth middleware: requires a user identifier in params, body, or x-user-id header
 function requireAuth(req, res, next) {
@@ -608,9 +649,9 @@ app.post('/api/auth/signup', authRateLimiter.middleware(), async (req, res) => {
       });
     }
 
-    const validRoles = ['customer', 'service_provider'];
+    const validRoles = ['customer', 'service_provider', 'admin'];
     if (!validRoles.includes(userRole)) {
-      return res.status(400).json({ message: 'userRole must be "customer" or "service_provider".' });
+      return res.status(400).json({ message: 'userRole must be "customer", "service_provider", or "admin".' });
     }
 
     // For service providers, require profile information
@@ -774,9 +815,9 @@ app.post('/api/auth/login', authRateLimiter.middleware(), async (req, res) => {
       return res.status(400).json({ message: 'email, password, and userRole are required.' });
     }
 
-    const validRoles = ['customer', 'service_provider'];
+    const validRoles = ['customer', 'service_provider', 'admin'];
     if (!validRoles.includes(userRole)) {
-      return res.status(400).json({ message: 'userRole must be "customer" or "service_provider".' });
+      return res.status(400).json({ message: 'userRole must be "customer", "service_provider", or "admin".' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -788,8 +829,14 @@ app.post('/api/auth/login', authRateLimiter.middleware(), async (req, res) => {
 
     if (accountLookup.rows.length > 0 && accountLookup.rows[0].user_role !== userRole) {
       const existingRole = accountLookup.rows[0].user_role;
+      const formattedRole = existingRole === 'service_provider'
+        ? 'Service Provider'
+        : existingRole === 'admin'
+          ? 'Admin'
+          : 'Customer';
+
       return res.status(401).json({
-        message: `This email is registered as ${existingRole === 'service_provider' ? 'Service Provider' : 'Customer'}. Switch account type and try again.`,
+        message: `This email is registered as ${formattedRole}. Switch account type and try again.`,
       });
     }
 
@@ -1026,7 +1073,7 @@ app.put('/api/providers/:spId/location', requireAuth, async (req, res) => {
   try {
     const { spId } = req.params;
     const { latitude, longitude, address_full } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.user_id;
 
     // Verify provider owns this account
     const providerResult = await pool.query(
@@ -1979,13 +2026,13 @@ app.post('/api/chat/troubleshoot', async (req, res) => {
 // Phase 5: ADMIN DASHBOARD ENDPOINTS
 // ============================================================================
 
-// Middleware to verify admin access (user_id === 1 for now)
+// Middleware to verify admin access by role.
 const requireAdmin = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: 'Authentication required' });
   }
   
-  if (req.user.user_id !== 1) {
+  if (req.user.user_role !== 'admin') {
     return res.status(403).json({ message: 'Admin access required' });
   }
   
@@ -2006,7 +2053,7 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
         (SELECT COUNT(*) FROM service_requests WHERE status = 'pending') as pending_requests,
         (SELECT COUNT(*) FROM service_requests WHERE status = 'in_progress') as in_progress_requests,
         (SELECT COUNT(*) FROM service_requests WHERE status = 'rejected') as rejected_requests,
-        (SELECT AVG(CAST(rating as NUMERIC)) FROM service_provider WHERE rating IS NOT NULL) as avg_provider_rating
+        (SELECT AVG(CAST(customer_rating as NUMERIC)) FROM service_requests WHERE customer_rating IS NOT NULL AND customer_rating > 0) as avg_provider_rating
     `;
 
     const result = await pool.query(statsQuery);
@@ -2032,6 +2079,11 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
 // GET /api/admin/users - List of customers
 app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
   try {
+    const requestUserColumn = await resolveServiceRequestUserColumn();
+    const userJoinClause = requestUserColumn
+      ? `LEFT JOIN service_requests sr ON u.user_id = sr.${requestUserColumn}`
+      : 'LEFT JOIN service_requests sr ON FALSE';
+
     const query = `
       SELECT
         u.user_id,
@@ -2039,11 +2091,13 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
         u.email,
         u.phone,
         u.location,
+        u.is_suspended,
+        u.warning_count,
         COUNT(sr.request_id) as request_count
       FROM app_users u
-      LEFT JOIN service_requests sr ON u.user_id = sr.customer_id
+      ${userJoinClause}
       WHERE u.user_role = 'customer'
-      GROUP BY u.user_id, u.full_name, u.email, u.phone, u.location
+      GROUP BY u.user_id, u.full_name, u.email, u.phone, u.location, u.is_suspended, u.warning_count
       ORDER BY u.user_id DESC
       LIMIT 100
     `;
@@ -2064,7 +2118,7 @@ app.get('/api/admin/providers', requireAuth, requireAdmin, async (req, res) => {
         sp.sp_id,
         sp.sp_name,
         sp.specialization,
-        sp.rating as avg_rating,
+        COALESCE(ROUND(AVG(CASE WHEN sr.customer_rating > 0 THEN sr.customer_rating END)::numeric, 1), 0) as avg_rating,
         sp.hourly_charge,
         sp.availability,
         sp.is_suspended,
@@ -2078,7 +2132,7 @@ app.get('/api/admin/providers', requireAuth, requireAdmin, async (req, res) => {
         COUNT(sr.request_id) as completed_requests
       FROM service_provider sp
       LEFT JOIN service_requests sr ON sp.sp_id = sr.sp_id AND sr.status = 'completed'
-      GROUP BY sp.sp_id, sp.sp_name, sp.specialization, sp.rating, sp.hourly_charge, sp.availability,
+      GROUP BY sp.sp_id, sp.sp_name, sp.specialization, sp.hourly_charge, sp.availability,
                sp.is_suspended, sp.warning_count, sp.verification_status, sp.verification_submitted_at,
                sp.verified_at, sp.trust_score, sp.badge_level, sp.background_check_status
       ORDER BY sp.sp_id DESC
@@ -2175,6 +2229,11 @@ app.post('/api/admin/providers/:spId/verification', requireAuth, requireAdmin, a
 // GET /api/admin/requests - List of all service requests
 app.get('/api/admin/requests', requireAuth, requireAdmin, async (req, res) => {
   try {
+    const requestUserColumn = await resolveServiceRequestUserColumn();
+    const customerJoinClause = requestUserColumn
+      ? `LEFT JOIN app_users u ON sr.${requestUserColumn} = u.user_id`
+      : 'LEFT JOIN app_users u ON FALSE';
+
     const query = `
       SELECT
         sr.request_id,
@@ -2185,7 +2244,7 @@ app.get('/api/admin/requests', requireAuth, requireAdmin, async (req, res) => {
         (SELECT SUM(total_amount) FROM invoices WHERE request_id = sr.request_id) as total_amount,
         sr.submitted_at
       FROM service_requests sr
-      LEFT JOIN app_users u ON sr.customer_id = u.user_id
+      ${customerJoinClause}
       LEFT JOIN service_provider sp ON sr.sp_id = sp.sp_id
       ORDER BY sr.submitted_at DESC
       LIMIT 100
@@ -2581,8 +2640,12 @@ app.get('/api/admin/moderation-logs', requireAuth, requireAdmin, async (req, res
 // Create payment intent for invoice
 app.post('/api/invoices/:invoiceId/create-payment-intent', requireAuth, async (req, res) => {
   try {
+    if (!ensureStripeConfigured(res)) {
+      return;
+    }
+
     const { invoiceId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.user_id;
 
     // Get invoice details
     const invoiceResult = await pool.query(
@@ -2649,9 +2712,13 @@ app.post('/api/invoices/:invoiceId/create-payment-intent', requireAuth, async (r
 // Confirm payment and update invoice status
 app.post('/api/invoices/:invoiceId/confirm-payment', requireAuth, async (req, res) => {
   try {
+    if (!ensureStripeConfigured(res)) {
+      return;
+    }
+
     const { invoiceId } = req.params;
     const { paymentIntentId } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.user_id;
 
     // Get invoice details
     const invoiceResult = await pool.query(
@@ -2707,7 +2774,7 @@ app.post('/api/invoices/:invoiceId/confirm-payment', requireAuth, async (req, re
 app.get('/api/invoices/:invoiceId/payment-status', requireAuth, async (req, res) => {
   try {
     const { invoiceId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.user_id;
 
     const result = await pool.query(
       'SELECT invoice_id, payment_status, paid_at, total_amount FROM invoices WHERE invoice_id = $1',
@@ -2743,7 +2810,7 @@ app.get('/api/invoices/:invoiceId/payment-status', requireAuth, async (req, res)
 });
 
 // Stripe webhook handler
-app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+app.post('/api/webhooks/stripe', async (req, res) => {
   try {
     const sig = req.headers['stripe-signature'];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -2751,9 +2818,13 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
     let event;
 
     if (endpointSecret) {
+      if (!ensureStripeConfigured(res)) {
+        return;
+      }
+
       event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
     } else {
-      event = JSON.parse(req.body);
+      event = JSON.parse(req.body.toString('utf8'));
     }
 
     // Handle webhook events
@@ -2930,7 +3001,27 @@ app.get('/api/admin/payments', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+async function initializeDatabase() {
+  // Order matters due to FK relationships.
+  await initializeAuthTable();
+  await initializeServiceProviderTable();
+  await initializeServiceRequestsTable();
+  await initializeInvoicesTable();
+  await initializeMessagesTable();
+  await initializeModerationTables();
+}
+
+async function startServer() {
+  try {
+    await initializeDatabase();
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error('Server startup failed during initialization:', err.message || err);
+    process.exit(1);
+  }
+}
+
+startServer();
 

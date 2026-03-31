@@ -310,7 +310,11 @@ function App() {
     
     setCurrentUser(user);
     localStorage.setItem('hs_user', JSON.stringify(user));
-    const nextScreen = user?.user_role === 'service_provider' ? 'profile' : postAuthScreen;
+    const nextScreen = user?.user_role === 'service_provider'
+      ? 'profile'
+      : user?.user_role === 'admin'
+        ? 'admin'
+        : postAuthScreen;
     setCurrentScreen(nextScreen);
     setPostAuthScreen('home');
   };
@@ -562,7 +566,7 @@ function App() {
                 </>
               ) : (
                 <>
-                  {currentUser?.user_id === 1 && (
+                  {currentUser?.user_role === 'admin' && (
                     <button className="btn-s nav-auth-btn admin-btn" onClick={() => setCurrentScreen('admin')}>
                       Admin Dashboard
                     </button>
@@ -823,7 +827,7 @@ function App() {
               </>
             )}
 
-            {currentScreen === 'admin' && currentUser?.user_id === 1 && (
+            {currentScreen === 'admin' && currentUser?.user_role === 'admin' && (
               <AdminDashboardPage
                 onLogout={handleLogout}
                 currentUser={currentUser}

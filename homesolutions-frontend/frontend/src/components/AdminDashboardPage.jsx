@@ -70,57 +70,81 @@ function AdminDashboardPage({ onLogout, currentUser }) {
         }),
       ]);
 
-      if (!statsRes.ok) {
-        throw new Error('Unable to fetch admin stats');
-      }
+      const failedSections = [];
 
       const statsData = await readJsonSafely(statsRes);
-      setStats(statsData);
+      if (statsRes.ok) {
+        setStats(statsData || null);
+      } else {
+        failedSections.push('stats');
+      }
 
       if (usersRes.ok) {
         const usersData = await readJsonSafely(usersRes);
         setUsers(Array.isArray(usersData) ? usersData : []);
+      } else {
+        failedSections.push('users');
       }
 
       if (providersRes.ok) {
         const providersData = await readJsonSafely(providersRes);
         setProviders(Array.isArray(providersData) ? providersData : []);
+      } else {
+        failedSections.push('providers');
       }
 
       if (requestsRes.ok) {
         const requestsData = await readJsonSafely(requestsRes);
         setRequests(Array.isArray(requestsData) ? requestsData : []);
+      } else {
+        failedSections.push('requests');
       }
 
       if (revenueRes.ok) {
         const revenueData = await readJsonSafely(revenueRes);
         setRevenue(revenueData);
+      } else {
+        failedSections.push('revenue');
       }
 
       if (logsRes.ok) {
         const logsData = await readJsonSafely(logsRes);
         setModerationLogs(Array.isArray(logsData) ? logsData : []);
+      } else {
+        failedSections.push('moderation logs');
       }
 
       if (paymentsRes.ok) {
         const paymentsData = await readJsonSafely(paymentsRes);
         setPayments(Array.isArray(paymentsData.transactions) ? paymentsData.transactions : []);
         setPaymentSummary(paymentsData.summary);
+      } else {
+        failedSections.push('payments');
       }
 
       if (payoutsRes.ok) {
         const payoutsData = await readJsonSafely(payoutsRes);
         setPendingPayouts(Array.isArray(payoutsData) ? payoutsData : []);
+      } else {
+        failedSections.push('pending payouts');
       }
 
       if (pendingVerificationRes.ok) {
         const verificationData = await readJsonSafely(pendingVerificationRes);
         setPendingVerification(Array.isArray(verificationData) ? verificationData : []);
+      } else {
+        failedSections.push('verification');
       }
 
       if (analyticsRes.ok) {
         const analyticsData = await readJsonSafely(analyticsRes);
         setAnalytics(analyticsData || null);
+      } else {
+        failedSections.push('analytics');
+      }
+
+      if (failedSections.length > 0) {
+        setError(`Some dashboard sections could not load: ${failedSections.join(', ')}`);
       }
     } catch (err) {
       setError(err.message || 'Unable to load admin data');

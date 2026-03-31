@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { loadStripe } from '@stripe/js';
+import { loadStripe } from '@stripe/stripe-js';
 import { CardElement, Elements, useStripe, useElements } from '@stripe/react-stripe-js';
-import { buildApiUrl } from '../api';
+import { buildApiUrl, getAuthHeaders } from '../api';
 
 let stripePromise;
 
@@ -26,10 +26,7 @@ function PaymentFormContent({ invoiceId, totalAmount, onPaymentSuccess, onPaymen
       try {
         const response = await fetch(buildApiUrl(`/invoices/${invoiceId}/create-payment-intent`), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-          },
+          headers: getAuthHeaders(),
         });
 
         if (!response.ok) {
@@ -74,10 +71,7 @@ function PaymentFormContent({ invoiceId, totalAmount, onPaymentSuccess, onPaymen
         // Confirm payment on backend
         const confirmResponse = await fetch(buildApiUrl(`/invoices/${invoiceId}/confirm-payment`), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-          },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ paymentIntentId: result.paymentIntent.id }),
         });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { buildApiUrl } from '../api';
+import { buildApiUrl, getAuthHeaders, getAuthToken } from '../api';
 import { CardElement, Elements, useStripe, useElements } from '@stripe/react-stripe-js';
 
 function money(value) {
@@ -29,7 +29,7 @@ function PaymentFormContent({ invoiceId, totalAmount, onPaymentSuccess }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [clientSecret, setClientSecret] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
-  const token = localStorage.getItem('authToken');
+  const token = getAuthToken();
 
   // Fetch payment intent on mount
   useEffect(() => {
@@ -37,10 +37,7 @@ function PaymentFormContent({ invoiceId, totalAmount, onPaymentSuccess }) {
       try {
         const response = await fetch(buildApiUrl(`/invoices/${invoiceId}/create-payment-intent`), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers: getAuthHeaders(),
         });
 
         if (!response.ok) {
@@ -85,10 +82,7 @@ function PaymentFormContent({ invoiceId, totalAmount, onPaymentSuccess }) {
         // Confirm payment on backend
         const confirmResponse = await fetch(buildApiUrl(`/invoices/${invoiceId}/confirm-payment`), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ paymentIntentId: result.paymentIntent.id }),
         });
 
@@ -157,7 +151,7 @@ function ServiceInvoicePage({ invoiceRequest, onBackToProfile }) {
       const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_publican';
       if (publishableKey) {
         try {
-          const { loadStripe } = await import('@stripe/js');
+          const { loadStripe } = await import('@stripe/stripe-js');
           const stripe = await loadStripe(publishableKey);
           setStripePromise(stripe);
         } catch (err) {
@@ -171,11 +165,8 @@ function ServiceInvoicePage({ invoiceRequest, onBackToProfile }) {
   // Check payment status
   useEffect(() => {
     if (invoiceRequest?.invoiceId) {
-      const token = localStorage.getItem('authToken');
       fetch(buildApiUrl(`/invoices/${invoiceRequest.invoiceId}/payment-status`), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
       })
         .then((res) => res.json())
         .then((data) => {
