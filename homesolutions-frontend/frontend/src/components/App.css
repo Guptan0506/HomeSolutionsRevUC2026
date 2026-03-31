@@ -2967,6 +2967,49 @@ body {
   border: 1px solid #fcd34d;
 }
 
+.card-meta .trust-pill {
+  background: #e8f7ef;
+  color: #0f7a4d;
+  border: 1px solid #7ed9ab;
+}
+
+.card-meta .trust-score-pill,
+.trust-score-pill {
+  background: #e7f0ff;
+  color: #2158a8;
+  border: 1px solid #8bb4ff;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+
+.card-meta .badge-level-pill {
+  background: #f4ecff;
+  color: #5c2ca4;
+  border: 1px solid #c8adf7;
+  text-transform: capitalize;
+}
+
+.doc-links-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.doc-links-cell a {
+  color: var(--accent-ocean);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.doc-links-cell a:hover {
+  text-decoration: underline;
+}
+
 /* Location Input for Provider Profile */
 .location-section {
   margin-top: 24px;

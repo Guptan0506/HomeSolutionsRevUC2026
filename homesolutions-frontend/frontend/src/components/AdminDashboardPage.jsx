@@ -18,10 +18,12 @@ function AdminDashboardPage({ onLogout, currentUser }) {
   const [payments, setPayments] = useState([]);
   const [paymentSummary, setPaymentSummary] = useState(null);
   const [pendingPayouts, setPendingPayouts] = useState([]);
+  const [pendingVerification, setPendingVerification] = useState([]);
   
   // Modal state
   const [actionModal, setActionModal] = useState(null); // { type, userId, providerId, action }
   const [payoutLoading, setPayoutLoading] = useState(false);
+  const [verificationLoading, setVerificationLoading] = useState(false);
   const [actionReason, setActionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -34,7 +36,7 @@ function AdminDashboardPage({ onLogout, currentUser }) {
     setError('');
 
     try {
-      const [statsRes, usersRes, providersRes, requestsRes, revenueRes, logsRes, paymentsRes, payoutsRes] = await Promise.all([
+      const [statsRes, usersRes, providersRes, requestsRes, revenueRes, logsRes, paymentsRes, payoutsRes, pendingVerificationRes] = await Promise.all([
         fetch(buildApiUrl('/api/admin/stats'), {
           headers: getAuthHeaders(),
         }),
@@ -57,6 +59,9 @@ function AdminDashboardPage({ onLogout, currentUser }) {
           headers: getAuthHeaders(),
         }),
         fetch(buildApiUrl('/api/admin/pending-payouts'), {
+          headers: getAuthHeaders(),
+        }),
+        fetch(buildApiUrl('/api/admin/verification-pending'), {
           headers: getAuthHeaders(),
         }),
       ]);
@@ -102,6 +107,11 @@ function AdminDashboardPage({ onLogout, currentUser }) {
       if (payoutsRes.ok) {
         const payoutsData = await readJsonSafely(payoutsRes);
         setPendingPayouts(Array.isArray(payoutsData) ? payoutsData : []);
+      }
+
+      if (pendingVerificationRes.ok) {
+        const verificationData = await readJsonSafely(pendingVerificationRes);
+        setPendingVerification(Array.isArray(verificationData) ? verificationData : []);
       }
     } catch (err) {
       setError(err.message || 'Unable to load admin data');
@@ -172,6 +182,34 @@ function AdminDashboardPage({ onLogout, currentUser }) {
     }
   };
 
+  const handleVerificationDecision = async (providerId, action) => {
+    setVerificationLoading(true);
+    try {
+      const response = await fetch(buildApiUrl(`/api/admin/providers/${providerId}/verification`), {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          action,
+          review_note: action === 'approve' ? 'Verification approved by admin' : 'Verification rejected by admin',
+        }),
+      });
+
+      const data = await readJsonSafely(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, `Failed to ${action} verification`));
+      }
+
+      setError('');
+      await fetchAdminData();
+    } catch (err) {
+      setError(err.message || 'Unable to process verification decision');
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="admin-dashboard">
@@ -236,6 +274,12 @@ function AdminDashboardPage({ onLogout, currentUser }) {
           onClick={() => setActiveTab('payments')}
         >
           Payments
+        </button>
+        <button
+          className={`admin-nav-btn ${activeTab === 'trust' ? 'active' : ''}`}
+          onClick={() => setActiveTab('trust')}
+        >
+          Trust
         </button>
       </div>
 
@@ -805,6 +849,78 @@ function AdminDashboardPage({ onLogout, currentUser }) {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'trust' && (
+          <div className="admin-table-section">
+            <h2>Trust and Verification Review</h2>
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Provider</th>
+                    <th>Specialization</th>
+                    <th>Submitted</th>
+                    <th>Background Check</th>
+                    <th>Current Trust</th>
+                    <th>Documents</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingVerification.length > 0 ? (
+                    pendingVerification.map((provider) => (
+                      <tr key={provider.sp_id}>
+                        <td>
+                          <strong>{provider.sp_name}</strong>
+                          <div style={{ fontSize: '12px', color: '#64748b' }}>{provider.sp_email || '-'}</div>
+                        </td>
+                        <td>{provider.specialization || '-'}</td>
+                        <td>{provider.verification_submitted_at ? new Date(provider.verification_submitted_at).toLocaleDateString() : '-'}</td>
+                        <td>
+                          <span className={`status-badge ${provider.background_check_status === 'approved' ? 'available' : 'unavailable'}`}>
+                            {provider.background_check_status || 'not_submitted'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="trust-score-pill">{Number(provider.trust_score || 0).toFixed(0)}</span>
+                        </td>
+                        <td>
+                          <div className="doc-links-cell">
+                            {provider.id_document_url ? <a href={provider.id_document_url} target="_blank" rel="noreferrer">ID</a> : <span>ID -</span>}
+                            {provider.license_document_url ? <a href={provider.license_document_url} target="_blank" rel="noreferrer">License</a> : <span>License -</span>}
+                            {provider.insurance_document_url ? <a href={provider.insurance_document_url} target="_blank" rel="noreferrer">Insurance</a> : <span>Insurance -</span>}
+                          </div>
+                        </td>
+                        <td className="action-cell">
+                          <button
+                            className="btn-action unsuspend"
+                            onClick={() => handleVerificationDecision(provider.sp_id, 'approve')}
+                            disabled={verificationLoading}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            className="btn-action suspend"
+                            onClick={() => handleVerificationDecision(provider.sp_id, 'reject')}
+                            disabled={verificationLoading}
+                          >
+                            Reject
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="7" className="empty-message">
+                        No pending verification requests
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

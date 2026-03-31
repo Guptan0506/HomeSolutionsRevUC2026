@@ -185,12 +185,25 @@ const initializeServiceProviderTable = async () => {
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS suspension_reason TEXT`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS warning_count INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS verification_status VARCHAR(30) DEFAULT 'unverified'`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS verification_notes TEXT`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS verification_submitted_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS verified_by_admin_id INTEGER`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS trust_score DECIMAL(5, 2) DEFAULT 0`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS badge_level VARCHAR(30) DEFAULT 'new'`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS id_document_url TEXT`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS license_document_url TEXT`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS insurance_document_url TEXT`);
+    await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS background_check_status VARCHAR(30) DEFAULT 'not_submitted'`);
     
     // Location columns for geolocation features
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8)`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8)`);
     await pool.query(`ALTER TABLE service_provider ADD COLUMN IF NOT EXISTS address_full TEXT`);
     await pool.query(`CREATE INDEX IF NOT EXISTS service_provider_location_idx ON service_provider (latitude, longitude)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS service_provider_verification_status_idx ON service_provider (verification_status)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS service_provider_trust_score_idx ON service_provider (trust_score)`);
     
     await pool.query(`ALTER TABLE service_provider ALTER COLUMN sp_services DROP NOT NULL`);
     await pool.query(`ALTER TABLE service_provider ALTER COLUMN profile_picture_url DROP NOT NULL`);
@@ -429,6 +442,62 @@ const initializeModerationTables = async () => {
 };
 
 initializeModerationTables();
+
+const calculateBadgeLevel = (trustScore, verificationStatus) => {
+  if (verificationStatus !== 'verified') {
+    return 'new';
+  }
+
+  const score = Number(trustScore || 0);
+  if (score >= 90) {
+    return 'elite';
+  }
+  if (score >= 75) {
+    return 'verified_pro';
+  }
+  return 'verified';
+};
+
+const recalculateProviderTrustScore = async (providerId) => {
+  const metricsResult = await pool.query(
+    `SELECT
+       sp.verification_status,
+       sp.background_check_status,
+       COALESCE(AVG(CASE WHEN sr.customer_rating > 0 THEN sr.customer_rating END), 0) as avg_rating,
+       COUNT(CASE WHEN sr.status = 'completed' THEN 1 END) as completed_count
+     FROM service_provider sp
+     LEFT JOIN service_requests sr ON sr.sp_id = sp.sp_id
+     WHERE sp.sp_id = $1
+     GROUP BY sp.sp_id`,
+    [providerId]
+  );
+
+  if (metricsResult.rows.length === 0) {
+    return null;
+  }
+
+  const row = metricsResult.rows[0];
+  const avgRating = Number(row.avg_rating || 0);
+  const completedCount = Number(row.completed_count || 0);
+
+  const ratingScore = Math.min(50, avgRating * 10);
+  const completionScore = Math.min(20, completedCount);
+  const verificationScore = row.verification_status === 'verified' ? 20 : 0;
+  const backgroundScore = row.background_check_status === 'approved' ? 10 : 0;
+
+  const trustScore = Number((ratingScore + completionScore + verificationScore + backgroundScore).toFixed(2));
+  const badgeLevel = calculateBadgeLevel(trustScore, row.verification_status);
+
+  await pool.query(
+    `UPDATE service_provider
+     SET trust_score = $1,
+         badge_level = $2
+     WHERE sp_id = $3`,
+    [trustScore, badgeLevel, providerId]
+  );
+
+  return { trustScore, badgeLevel };
+};
 
 // Auth middleware: requires a user identifier in params, body, or x-user-id header
 function requireAuth(req, res, next) {
@@ -1039,6 +1108,95 @@ app.get('/api/providers/:spId/location', async (req, res) => {
   } catch (err) {
     console.error('Get location error:', err);
     res.status(500).json({ message: 'Failed to get provider location' });
+  }
+});
+
+app.post('/api/providers/:spId/verification/submit', requireAuth, async (req, res) => {
+  try {
+    const { spId } = req.params;
+    const {
+      id_document_url,
+      license_document_url,
+      insurance_document_url,
+      background_check_status,
+      verification_notes,
+    } = req.body || {};
+
+    const providerResult = await pool.query(
+      'SELECT sp_id, user_id FROM service_provider WHERE sp_id = $1',
+      [spId]
+    );
+
+    if (providerResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Provider not found' });
+    }
+
+    if (Number(providerResult.rows[0].user_id) !== Number(req.user.user_id)) {
+      return res.status(403).json({ message: 'You can only submit verification for your own profile' });
+    }
+
+    const result = await pool.query(
+      `UPDATE service_provider
+       SET id_document_url = COALESCE($1, id_document_url),
+           license_document_url = COALESCE($2, license_document_url),
+           insurance_document_url = COALESCE($3, insurance_document_url),
+           background_check_status = COALESCE($4, background_check_status),
+           verification_notes = COALESCE($5, verification_notes),
+           verification_status = 'pending',
+           verification_submitted_at = CURRENT_TIMESTAMP
+       WHERE sp_id = $6
+       RETURNING sp_id, verification_status, verification_submitted_at, background_check_status`,
+      [
+        id_document_url || null,
+        license_document_url || null,
+        insurance_document_url || null,
+        background_check_status || 'submitted',
+        verification_notes || null,
+        spId,
+      ]
+    );
+
+    await recalculateProviderTrustScore(Number(spId));
+
+    return res.json({
+      message: 'Verification submitted successfully and is pending admin review.',
+      verification: result.rows[0],
+    });
+  } catch (err) {
+    console.error('Submit verification error:', err);
+    return res.status(500).json({ message: 'Failed to submit verification' });
+  }
+});
+
+app.get('/api/providers/:spId/trust', async (req, res) => {
+  try {
+    const { spId } = req.params;
+    const result = await pool.query(
+      `SELECT
+         sp.sp_id,
+         sp.sp_name,
+         sp.verification_status,
+         sp.verified_at,
+         sp.trust_score,
+         sp.badge_level,
+         sp.background_check_status,
+         COALESCE(AVG(CASE WHEN sr.customer_rating > 0 THEN sr.customer_rating END), 0) AS average_rating,
+         COUNT(CASE WHEN sr.status = 'completed' THEN 1 END) AS completed_jobs
+       FROM service_provider sp
+       LEFT JOIN service_requests sr ON sr.sp_id = sp.sp_id
+       WHERE sp.sp_id = $1
+       GROUP BY sp.sp_id`,
+      [spId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Provider not found' });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Provider trust error:', err);
+    return res.status(500).json({ message: 'Failed to fetch trust details' });
   }
 });
 
@@ -1909,10 +2067,20 @@ app.get('/api/admin/providers', requireAuth, requireAdmin, async (req, res) => {
         sp.rating as avg_rating,
         sp.hourly_charge,
         sp.availability,
+        sp.is_suspended,
+        sp.warning_count,
+        sp.verification_status,
+        sp.verification_submitted_at,
+        sp.verified_at,
+        sp.trust_score,
+        sp.badge_level,
+        sp.background_check_status,
         COUNT(sr.request_id) as completed_requests
       FROM service_provider sp
       LEFT JOIN service_requests sr ON sp.sp_id = sr.sp_id AND sr.status = 'completed'
-      GROUP BY sp.sp_id, sp.sp_name, sp.specialization, sp.rating, sp.hourly_charge, sp.availability
+      GROUP BY sp.sp_id, sp.sp_name, sp.specialization, sp.rating, sp.hourly_charge, sp.availability,
+               sp.is_suspended, sp.warning_count, sp.verification_status, sp.verification_submitted_at,
+               sp.verified_at, sp.trust_score, sp.badge_level, sp.background_check_status
       ORDER BY sp.sp_id DESC
       LIMIT 100
     `;
@@ -1922,6 +2090,85 @@ app.get('/api/admin/providers', requireAuth, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Admin providers error:', err);
     return res.status(500).json({ message: 'Unable to fetch providers' });
+  }
+});
+
+app.get('/api/admin/verification-pending', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         sp.sp_id,
+         sp.sp_name,
+         sp.sp_email,
+         sp.specialization,
+         sp.verification_status,
+         sp.verification_submitted_at,
+         sp.id_document_url,
+         sp.license_document_url,
+         sp.insurance_document_url,
+         sp.background_check_status,
+         sp.verification_notes,
+         sp.trust_score,
+         sp.badge_level
+       FROM service_provider sp
+       WHERE sp.verification_status = 'pending'
+       ORDER BY sp.verification_submitted_at DESC NULLS LAST
+       LIMIT 100`
+    );
+
+    return res.json(result.rows || []);
+  } catch (err) {
+    console.error('Admin verification pending error:', err);
+    return res.status(500).json({ message: 'Unable to fetch pending verification requests' });
+  }
+});
+
+app.post('/api/admin/providers/:spId/verification', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { spId } = req.params;
+    const { action, review_note } = req.body || {};
+
+    if (!['approve', 'reject'].includes(String(action || '').toLowerCase())) {
+      return res.status(400).json({ message: 'action must be approve or reject' });
+    }
+
+    const status = action.toLowerCase() === 'approve' ? 'verified' : 'rejected';
+    const verifiedAt = status === 'verified' ? 'CURRENT_TIMESTAMP' : 'NULL';
+
+    const query = `
+      UPDATE service_provider
+      SET verification_status = $1,
+          verification_notes = $2,
+          verified_by_admin_id = $3,
+          verified_at = ${verifiedAt}
+      WHERE sp_id = $4
+      RETURNING sp_id, sp_name, verification_status, verification_notes, verified_at
+    `;
+
+    const result = await pool.query(query, [
+      status,
+      review_note || null,
+      req.user.user_id,
+      spId,
+    ]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Provider not found' });
+    }
+
+    const trustResult = await recalculateProviderTrustScore(Number(spId));
+
+    return res.json({
+      message: status === 'verified' ? 'Provider verified successfully' : 'Provider verification rejected',
+      provider: {
+        ...result.rows[0],
+        trust_score: trustResult?.trustScore ?? 0,
+        badge_level: trustResult?.badgeLevel ?? 'new',
+      },
+    });
+  } catch (err) {
+    console.error('Admin provider verification error:', err);
+    return res.status(500).json({ message: 'Unable to process verification decision' });
   }
 });
 

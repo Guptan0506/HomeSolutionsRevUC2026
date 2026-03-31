@@ -190,6 +190,9 @@ function ProvidersList({ onSelect }) {
             const profilePictureUrl = pro.profile_picture_url || null;
             const distance = pro.distance_miles ? `${pro.distance_miles} mi away` : null;
             const rating = pro.average_rating ? `⭐ ${pro.average_rating}` : null;
+            const verificationStatus = pro.verification_status || 'unverified';
+            const trustScore = pro.trust_score || 0;
+            const badgeLevel = pro.badge_level || 'new';
 
             return (
               <ProviderCard
@@ -200,6 +203,9 @@ function ProvidersList({ onSelect }) {
                 experience={providerExperience}
                 distance={distance}
                 rating={rating}
+                verificationStatus={verificationStatus}
+                trustScore={trustScore}
+                badgeLevel={badgeLevel}
                 initials={providerName.charAt(0)}
                 profilePictureUrl={profilePictureUrl}
                 onSelect={() => onSelect(pro)}

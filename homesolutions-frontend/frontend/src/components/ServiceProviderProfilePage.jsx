@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import MessagingPanel from './MessagingPanel';
 import { useUnreadMessages } from '../hooks/useUnreadMessages';
+import { buildApiUrl, getAuthHeaders } from '../api';
 
 function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -41,6 +42,13 @@ function ServiceProviderProfilePage({
   const [experience, setExperience] = useState(currentUser.experience_years || '');
   const [baseRate, setBaseRate] = useState(currentUser.base_rate || currentUser.hourly_charge || '');
   const [saveMessage, setSaveMessage] = useState('');
+  const [idDocumentUrl, setIdDocumentUrl] = useState(currentUser.id_document_url || '');
+  const [licenseDocumentUrl, setLicenseDocumentUrl] = useState(currentUser.license_document_url || '');
+  const [insuranceDocumentUrl, setInsuranceDocumentUrl] = useState(currentUser.insurance_document_url || '');
+  const [verificationNotes, setVerificationNotes] = useState('');
+  const [verificationSubmitting, setVerificationSubmitting] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState('');
+  const [verificationError, setVerificationError] = useState('');
 
   const [activeAcceptRequestId, setActiveAcceptRequestId] = useState(null);
   const [estimatedTime, setEstimatedTime] = useState('');
@@ -181,6 +189,44 @@ function ServiceProviderProfilePage({
     setActiveCompleteRequestId(null);
   };
 
+  const handleSubmitVerification = async () => {
+    if (!currentUser?.sp_id) {
+      setVerificationError('Provider profile is not linked yet. Save profile first and try again.');
+      return;
+    }
+
+    setVerificationSubmitting(true);
+    setVerificationError('');
+    setVerificationMessage('');
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/providers/${currentUser.sp_id}/verification/submit`), {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          id_document_url: idDocumentUrl || null,
+          license_document_url: licenseDocumentUrl || null,
+          insurance_document_url: insuranceDocumentUrl || null,
+          background_check_status: 'submitted',
+          verification_notes: verificationNotes || null,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to submit verification right now.');
+      }
+
+      setVerificationMessage('Verification request submitted. Admin review is pending.');
+      window.setTimeout(() => setVerificationMessage(''), 2500);
+    } catch (err) {
+      setVerificationError(err.message || 'Verification submission failed.');
+    } finally {
+      setVerificationSubmitting(false);
+    }
+  };
+
   return (
     <section className="section-wrap service-provider-wrap">
       <div className="sec-label">Service Provider Profile</div>
@@ -242,6 +288,63 @@ function ServiceProviderProfilePage({
             <div className="profile-editor-actions">
               <button type="button" className="btn-p" onClick={handleSaveAbout}>Save About</button>
               {saveMessage && <p className="profile-save-message">{saveMessage}</p>}
+            </div>
+
+            <div className="location-section" style={{ marginTop: '18px' }}>
+              <h3>Trust and Verification</h3>
+
+              <div className="location-form">
+                <div className="location-input-group">
+                  <label htmlFor="provider-id-doc">Government ID URL</label>
+                  <input
+                    id="provider-id-doc"
+                    value={idDocumentUrl}
+                    onChange={(e) => setIdDocumentUrl(e.target.value)}
+                    placeholder="https://..."
+                  />
+                </div>
+
+                <div className="location-input-group">
+                  <label htmlFor="provider-license-doc">License/Certification URL</label>
+                  <input
+                    id="provider-license-doc"
+                    value={licenseDocumentUrl}
+                    onChange={(e) => setLicenseDocumentUrl(e.target.value)}
+                    placeholder="https://..."
+                  />
+                </div>
+
+                <div className="location-input-group">
+                  <label htmlFor="provider-insurance-doc">Insurance Document URL</label>
+                  <input
+                    id="provider-insurance-doc"
+                    value={insuranceDocumentUrl}
+                    onChange={(e) => setInsuranceDocumentUrl(e.target.value)}
+                    placeholder="https://..."
+                  />
+                </div>
+
+                <div className="location-input-group">
+                  <label htmlFor="provider-verification-notes">Verification Notes (optional)</label>
+                  <textarea
+                    id="provider-verification-notes"
+                    className="input-field profile-input"
+                    rows="3"
+                    value={verificationNotes}
+                    onChange={(e) => setVerificationNotes(e.target.value)}
+                    placeholder="Add extra context for admin review"
+                  />
+                </div>
+              </div>
+
+              <div className="location-button-group">
+                <button type="button" className="btn-p" onClick={handleSubmitVerification} disabled={verificationSubmitting}>
+                  {verificationSubmitting ? 'Submitting...' : 'Submit Verification'}
+                </button>
+              </div>
+
+              {verificationMessage && <div className="location-status success">{verificationMessage}</div>}
+              {verificationError && <div className="location-status error">{verificationError}</div>}
             </div>
           </div>
         </div>

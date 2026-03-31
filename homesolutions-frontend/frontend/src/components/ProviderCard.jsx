@@ -1,6 +1,19 @@
 import React from 'react';
 
-function ProviderCard({ name, type, price, experience, distance, rating, initials, onSelect, profilePictureUrl }) {
+function ProviderCard({
+  name,
+  type,
+  price,
+  experience,
+  distance,
+  rating,
+  verificationStatus,
+  trustScore,
+  badgeLevel,
+  initials,
+  onSelect,
+  profilePictureUrl,
+}) {
   return (
     <div className="card">
       <div className="card-head">
@@ -27,7 +40,17 @@ function ProviderCard({ name, type, price, experience, distance, rating, initial
         <span className="pill">{experience} years experience</span>
         {distance && <span className="pill location-pill">📍 {distance}</span>}
         {rating && <span className="pill rating-pill">{rating}</span>}
-        <span className="pill">Verified Profile</span>
+        {verificationStatus === 'verified' ? (
+          <span className="pill trust-pill">Verified Profile</span>
+        ) : (
+          <span className="pill">Unverified</span>
+        )}
+        {Number(trustScore || 0) > 0 && (
+          <span className="pill trust-score-pill">Trust {Number(trustScore).toFixed(0)}</span>
+        )}
+        {badgeLevel && badgeLevel !== 'new' && (
+          <span className="pill badge-level-pill">{badgeLevel.replace('_', ' ')}</span>
+        )}
       </div>
 
       <button 
