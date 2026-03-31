@@ -485,6 +485,7 @@ function App() {
       }
 
       setInvoiceRequest({
+        invoiceId: data.invoice_id,
         requestId: data.request_id,
         requestedAt: (data.request_date && data.request_time)
           ? `${data.request_date}T${data.request_time}`
