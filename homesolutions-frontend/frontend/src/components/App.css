@@ -491,6 +491,18 @@ body {
   color: var(--ink-700);
 }
 
+.location-badge {
+  display: inline-block;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background-color: #e8f5ff;
+  border: 1px solid #b3deff;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #0f6e8c;
+  font-weight: 500;
+}
+
 .provider-selection-grid {
   display: grid;
   gap: 20px;

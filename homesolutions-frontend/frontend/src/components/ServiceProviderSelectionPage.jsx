@@ -21,7 +21,7 @@ function getProviderRating(provider) {
   return generated.toFixed(1);
 }
 
-function ServiceProviderSelectionPage({ selectedService, onBookNow }) {
+function ServiceProviderSelectionPage({ selectedService, customerLocation, onBookNow }) {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -34,7 +34,17 @@ function ServiceProviderSelectionPage({ selectedService, onBookNow }) {
       setError('');
 
       try {
-        const response = await fetch(buildApiUrl('/api/providers'));
+        if (!customerLocation?.trim()) {
+          if (isMounted) {
+            setProviders([]);
+            setError('Add your location in your profile to see providers in your area.');
+            setLoading(false);
+          }
+          return;
+        }
+
+        const query = new URLSearchParams({ location: customerLocation.trim() }).toString();
+        const response = await fetch(buildApiUrl(`/api/providers?${query}`));
         const data = await readJsonSafely(response);
 
         if (!response.ok || !Array.isArray(data)) {
@@ -60,7 +70,7 @@ function ServiceProviderSelectionPage({ selectedService, onBookNow }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [customerLocation]);
 
   const visibleProviders = useMemo(() => {
     if (!selectedService) {
@@ -83,6 +93,11 @@ function ServiceProviderSelectionPage({ selectedService, onBookNow }) {
       <p className="selected-service-copy">
         Service Selected: <strong>{selectedService || 'General Home Service'}</strong>
       </p>
+      {customerLocation && (
+        <div className="location-badge">
+          Your area: <strong>{customerLocation}</strong>
+        </div>
+      )}
 
       {loading && (
         <div className="state-card">

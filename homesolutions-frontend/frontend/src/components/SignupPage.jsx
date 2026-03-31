@@ -6,6 +6,7 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [location, setLocation] = useState('');
   const [selectedRole, setSelectedRole] = useState('customer');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,6 +90,7 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
         email, 
         password, 
         userRole: selectedRole,
+        location,
         profilePhoto: profilePhoto || null,
       };
 
@@ -198,6 +200,16 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Re-enter password"
             required
+          />
+
+          <label className="field-label" htmlFor="signup-location">Your Area / Location</label>
+          <input
+            id="signup-location"
+            type="text"
+            className="input-field auth-input"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="e.g., Downtown, North Park"
           />
 
           <label className="field-label" htmlFor="signup-photo">Profile Picture (Optional)</label>

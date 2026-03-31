@@ -92,6 +92,7 @@ const initializeAuthTable = async () => {
     await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS user_role VARCHAR(50) DEFAULT 'customer' NOT NULL`);
     await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone VARCHAR(30)`);
+    await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS location VARCHAR(255)`);
     await pool.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS profile_photo TEXT`);
 
     // Ensure required columns are not nullable for auth flows.
@@ -354,6 +355,7 @@ app.post('/api/auth/signup', async (req, res) => {
       email, 
       password, 
       userRole,
+      location,
       profilePhoto,
       // Service provider fields
       specialization,
@@ -384,6 +386,7 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedLocation = typeof location === 'string' ? location.trim() : '';
     const normalizedProfilePhoto =
       typeof profilePhoto === 'string' && profilePhoto.trim()
         ? profilePhoto.trim()
@@ -401,10 +404,10 @@ app.post('/api/auth/signup', async (req, res) => {
     
     // Create user  
     const userResult = await client.query(
-      `INSERT INTO app_users (full_name, email, password_hash, user_role, profile_photo)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING user_id, full_name, email, user_role, profile_photo, created_at`,
-      [fullName.trim(), normalizedEmail, passwordHash, userRole, normalizedProfilePhoto]
+      `INSERT INTO app_users (full_name, email, password_hash, user_role, location, profile_photo)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING user_id, full_name, email, user_role, location, profile_photo, created_at`,
+      [fullName.trim(), normalizedEmail, passwordHash, userRole, normalizedLocation || null, normalizedProfilePhoto]
     );
 
     const user = userResult.rows[0];
@@ -420,18 +423,20 @@ app.post('/api/auth/signup', async (req, res) => {
          SET sp_name = $2,
              sp_email = $3,
              specialization = $4,
-             hourly_charge = $5,
-             experience_years = $6,
-             services = $7,
-             profile_picture_url = $8,
-             sp_services = $9,
-             sp_base_price_per_hr = $10
+             sp_location = $5,
+             hourly_charge = $6,
+             experience_years = $7,
+             services = $8,
+             profile_picture_url = $9,
+             sp_services = $10,
+             sp_base_price_per_hr = $11
          WHERE user_id = $1`,
         [
           user.user_id,
           fullName.trim(),
           normalizedEmail,
           specialization || '',
+          normalizedLocation || '',
           parsedHourlyCharge,
           parsedExperienceYears,
           normalizedServices,
@@ -457,7 +462,7 @@ app.post('/api/auth/signup', async (req, res) => {
               fullName.trim(),
               normalizedEmail,
               '',
-              '',
+              normalizedLocation || '',
               specialization || '',
               parsedHourlyCharge,
               parsedExperienceYears,
@@ -487,7 +492,7 @@ app.post('/api/auth/signup', async (req, res) => {
               fullName.trim(),
               normalizedEmail,
               '',
-              '',
+              normalizedLocation || '',
               specialization || '',
               parsedHourlyCharge,
               parsedExperienceYears,
@@ -554,6 +559,7 @@ app.post('/api/auth/login', async (req, res) => {
          u.password_hash,
          u.user_role,
          u.phone,
+         u.location AS user_location,
          u.profile_photo,
          sp.sp_id,
          sp.sp_location,
@@ -592,7 +598,7 @@ app.post('/api/auth/login', async (req, res) => {
         phone: user.phone || '',
         profile_photo: user.profile_photo || user.profile_picture_url || '',
         sp_id: user.sp_id || null,
-        location: user.sp_location || '',
+        location: user.user_role === 'service_provider' ? (user.sp_location || '') : (user.user_location || ''),
         specialization: user.specialization || '',
         availability: user.availability || '',
         services: user.services || '',
@@ -609,6 +615,15 @@ app.post('/api/auth/login', async (req, res) => {
 // GET all service providers
 app.get('/api/providers', async (req, res) => {
   try {
+    const normalizedLocation = typeof req.query.location === 'string' ? req.query.location.trim() : '';
+    const params = [];
+    const filters = [`TRIM(COALESCE(sp.availability, '')) <> ''`];
+
+    if (normalizedLocation) {
+      params.push(`%${normalizedLocation.toLowerCase()}%`);
+      filters.push(`LOWER(COALESCE(sp.sp_location, '')) LIKE $${params.length}`);
+    }
+
     const result = await pool.query(
       `SELECT
          sp.*,
@@ -617,8 +632,9 @@ app.get('/api/providers', async (req, res) => {
        LEFT JOIN app_users au
          ON au.user_id = sp.user_id
          OR LOWER(COALESCE(au.email, '')) = LOWER(COALESCE(sp.sp_email, ''))
-       WHERE TRIM(COALESCE(sp.availability, '')) <> ''
-       ORDER BY sp.sp_name ASC`
+       WHERE ${filters.join(' AND ')}
+       ORDER BY sp.sp_name ASC`,
+      params
     );
     res.json(result.rows);
   } catch (err) {
@@ -719,9 +735,9 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
       full_name,
       email,
       phone,
+      location,
       profile_photo,
       user_role,
-      location,
       specialization,
       availability,
       services,
@@ -736,10 +752,11 @@ app.put('/api/users/:user_id/profile', async (req, res) => {
        SET full_name = COALESCE($1, full_name),
            email = COALESCE($2, email),
            phone = COALESCE($3, phone),
-           profile_photo = COALESCE($4, profile_photo)
-       WHERE user_id = $5
-       RETURNING user_id, full_name, email, user_role, phone, profile_photo`,
-      [full_name || null, normalizedEmail, phone || null, profile_photo || null, user_id]
+           location = COALESCE($4, location),
+           profile_photo = COALESCE($5, profile_photo)
+         WHERE user_id = $6
+         RETURNING user_id, full_name, email, user_role, phone, location, profile_photo`,
+        [full_name || null, normalizedEmail, phone || null, location || null, profile_photo || null, user_id]
     );
 
     if (userResult.rows.length === 0) {

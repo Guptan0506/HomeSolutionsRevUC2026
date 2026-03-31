@@ -650,6 +650,7 @@ function App() {
             <>
               <ServiceProviderSelectionPage
                 selectedService={selectedService}
+                customerLocation={currentUser?.location || ''}
                 onBookNow={handleBookNow}
               />
               {renderSharedFooter()}

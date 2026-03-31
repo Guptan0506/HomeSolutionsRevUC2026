@@ -41,7 +41,17 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
       setIsLoadingProviders(true);
 
       try {
-        const response = await fetch(buildApiUrl('/api/providers'));
+        if (currentUser?.user_role === 'customer' && !currentUser?.location?.trim()) {
+          throw new Error('Please add your location in your profile before requesting service.');
+        }
+
+        const params = new URLSearchParams();
+        if (currentUser?.location?.trim()) {
+          params.set('location', currentUser.location.trim());
+        }
+
+        const url = params.toString() ? buildApiUrl(`/api/providers?${params.toString()}`) : buildApiUrl('/api/providers');
+        const response = await fetch(url);
         const data = await readJsonSafely(response);
 
         if (!response.ok || !Array.isArray(data)) {
@@ -67,7 +77,7 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser?.location, currentUser?.user_role]);
 
   const providerMap = useMemo(() => {
     const map = new Map();

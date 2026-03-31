@@ -40,6 +40,7 @@ function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onReq
   const [fullName, setFullName] = useState(currentUser.full_name || '');
   const [email, setEmail] = useState(currentUser.email || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
+  const [location, setLocation] = useState(currentUser.location || '');
   const [saveMessage, setSaveMessage] = useState('');
 
   const displayPhoto = useMemo(() => {
@@ -70,6 +71,7 @@ function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onReq
       full_name: fullName,
       email,
       phone,
+      location,
       profile_photo: profilePhoto,
     });
     setSaveMessage('Profile updated successfully.');
@@ -137,6 +139,16 @@ function CustomerProfilePage({ currentUser, requestHistory, onProfileSave, onReq
               placeholder="(555) 000-0000"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+            />
+
+            <label className="field-label" htmlFor="customer-location">Your Area / Location</label>
+            <input
+              id="customer-location"
+              className="input-field profile-input"
+              type="text"
+              placeholder="e.g., Downtown, Westside"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
             />
 
             <div className="profile-editor-actions">
