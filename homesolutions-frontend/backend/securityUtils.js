@@ -1,49 +1,14 @@
 /**
  * Security Utilities Module
- * Handles password validation, JWT tokens, input sanitization, and rate limiting
+ * Handles JWT tokens, input sanitization, and rate limiting
  */
 
 const jwt = require('jsonwebtoken');
-
-// Password validation rules
-const PASSWORD_RULES = {
-  minLength: 10,
-  requireUppercase: true,
-  requireNumbers: true,
-  requireSpecialChars: true,
-  specialChars: '!@#$%^&*()_+-=[]{}|;:,.<>?'
-};
-
-/**
- * Validate password against security requirements
- * @param {string} password - Password to validate
- * @returns {Object} { isValid: boolean, errors: string[] }
- */
 function validatePassword(password) {
-  const errors = [];
-
-  if (!password) {
-    errors.push('Password is required.');
-    return { isValid: false, errors };
-  }
-
-  if (password.length < PASSWORD_RULES.minLength) {
-    errors.push(`Password must be at least ${PASSWORD_RULES.minLength} characters long.`);
-  }
-
-  if (PASSWORD_RULES.requireUppercase && !/[A-Z]/.test(password)) {
-    errors.push('Password must contain at least one uppercase letter.');
-  }
-
-  if (PASSWORD_RULES.requireNumbers && !/[0-9]/.test(password)) {
-    errors.push('Password must contain at least one number.');
-  }
-
-  if (PASSWORD_RULES.requireSpecialChars && !new RegExp(`[${PASSWORD_RULES.specialChars}]`).test(password)) {
-    errors.push(`Password must contain at least one special character: ${PASSWORD_RULES.specialChars}`);
-  }
-
-  return { isValid: errors.length === 0, errors };
+  return {
+    isValid: typeof password === 'string' && password.length > 0,
+    errors: [],
+  };
 }
 
 /**
@@ -147,7 +112,6 @@ function isValidEmail(email) {
 }
 
 module.exports = {
-  PASSWORD_RULES,
   validatePassword,
   generateToken,
   verifyToken,

@@ -14,7 +14,6 @@ const {
   notifyNewMessage,
 } = require('./notificationService');
 const {
-  validatePassword,
   generateToken,
   verifyToken,
   sanitizeInput,
@@ -778,15 +777,6 @@ app.post('/api/auth/signup', authRateLimiter.middleware(), async (req, res) => {
     // Validate email format
     if (!isValidEmail(email)) {
       return res.status(400).json({ message: 'Invalid email address.' });
-    }
-
-    // Validate password meets security requirements
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.isValid) {
-      return res.status(400).json({
-        message: 'Password does not meet security requirements.',
-        requirements: passwordValidation.errors,
-      });
     }
 
     const validRoles = ['customer', 'service_provider', 'admin'];
