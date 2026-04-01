@@ -1319,6 +1319,53 @@ body {
   margin-bottom: 10px;
 }
 
+.password-checklist-wrap {
+  overflow: hidden;
+  transition: max-height 220ms ease, opacity 220ms ease, margin-bottom 220ms ease;
+}
+
+.password-checklist-wrap.expanded {
+  max-height: 140px;
+  opacity: 1;
+  margin-bottom: 10px;
+}
+
+.password-checklist-wrap.collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+}
+
+.password-checklist {
+  list-style: none;
+  margin: -2px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.password-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.password-checklist .met {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.password-checklist .unmet {
+  color: var(--ink-500);
+}
+
+.password-hint-error {
+  margin: -4px 0 10px;
+  font-size: 12px;
+  color: #8d3728;
+}
+
 .auth-file-input {
   padding: 10px;
 }

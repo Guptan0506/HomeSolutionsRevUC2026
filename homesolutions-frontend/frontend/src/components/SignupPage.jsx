@@ -17,6 +17,22 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
   const [experienceYears, setExperienceYears] = useState('');
   const [services, setServices] = useState('');
   const [profilePhoto, setProfilePhoto] = useState('');
+  const passwordSpecialChars = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+
+  const passwordChecks = {
+    minLength: password.length >= 10,
+    uppercase: /[A-Z]/.test(password),
+    number: /[0-9]/.test(password),
+    special: [...password].some((char) => passwordSpecialChars.includes(char)),
+  };
+
+  const isPasswordStrong =
+    passwordChecks.minLength &&
+    passwordChecks.uppercase &&
+    passwordChecks.number &&
+    passwordChecks.special;
+  const showPasswordChecklist = password.length > 0;
+  const canSubmitPassword = isPasswordStrong && password === confirmPassword;
 
   const handlePhotoUpload = (event) => {
     const file = event.target.files?.[0];
@@ -61,8 +77,8 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (!isPasswordStrong) {
+      setError('Password must be 10+ chars and include uppercase, number, and special character.');
       return;
     }
 
@@ -188,9 +204,26 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
             className="input-field auth-input"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="At least 6 characters"
+            placeholder="At least 10 chars, 1 uppercase, 1 number, 1 special character"
             required
           />
+
+          <div className={`password-checklist-wrap ${showPasswordChecklist ? 'expanded' : 'collapsed'}`}>
+            <ul className="password-checklist" aria-live="polite">
+              <li className={passwordChecks.minLength ? 'met' : 'unmet'}>
+                {passwordChecks.minLength ? '✓' : '○'} At least 10 characters
+              </li>
+              <li className={passwordChecks.uppercase ? 'met' : 'unmet'}>
+                {passwordChecks.uppercase ? '✓' : '○'} At least one uppercase letter
+              </li>
+              <li className={passwordChecks.number ? 'met' : 'unmet'}>
+                {passwordChecks.number ? '✓' : '○'} At least one number
+              </li>
+              <li className={passwordChecks.special ? 'met' : 'unmet'}>
+                {passwordChecks.special ? '✓' : '○'} At least one special character
+              </li>
+            </ul>
+          </div>
 
           <label className="field-label" htmlFor="signup-confirm-password">Confirm Password</label>
           <input
@@ -202,6 +235,9 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
             placeholder="Re-enter password"
             required
           />
+          {confirmPassword && password !== confirmPassword && (
+            <p className="password-hint-error">Passwords do not match yet.</p>
+          )}
 
           <label className="field-label" htmlFor="signup-location">Your Area / Location</label>
           <input
@@ -274,7 +310,13 @@ function SignupPage({ onSignupSuccess, onSwitchToLogin }) {
 
           {error && <p className="auth-error">{error}</p>}
 
-          <button type="submit" className="btn-p auth-submit" disabled={isSubmitting}>
+          <button
+            type="submit"
+            className="btn-p auth-submit"
+            disabled={isSubmitting || !canSubmitPassword}
+            aria-disabled={isSubmitting || !canSubmitPassword}
+            title={!canSubmitPassword ? 'Complete password requirements to continue.' : ''}
+          >
             {isSubmitting ? 'Creating account...' : 'Create Account'}
           </button>
         </form>

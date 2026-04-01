@@ -200,6 +200,22 @@ cp .env.example .env
 # 3. Add your CORS_ALLOWED_ORIGINS
 ```
 
+### Frontend Deployment
+
+If the React app is deployed to Vercel, set `VITE_API_BASE_URL` in the frontend project settings to the deployed backend URL on Render. The browser app cannot use `localhost` on Vercel, so login and signup will fail unless the frontend points at a reachable API host.
+
+For example:
+
+```bash
+VITE_API_BASE_URL=https://your-render-service.onrender.com
+```
+
+Also add your Vercel domain(s) to `CORS_ALLOWED_ORIGINS` on the backend, for example:
+
+```bash
+CORS_ALLOWED_ORIGINS=https://your-app.vercel.app,https://your-custom-domain.com
+```
+
 ### Production Checklist
 - [ ] `JWT_SECRET` is random, 32+ characters, stored securely
 - [ ] `NODE_ENV=production` in .env

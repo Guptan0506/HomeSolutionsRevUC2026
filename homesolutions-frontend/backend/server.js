@@ -80,8 +80,37 @@ RULES:
 app.use(helmet()); // Add security headers
 
 // CORS Configuration
+const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+function isAllowedCorsOrigin(origin) {
+  if (!origin) {
+    return true;
+  }
+
+  if (configuredCorsOrigins.includes(origin)) {
+    return true;
+  }
+
+  try {
+    const parsedOrigin = new URL(origin);
+    return parsedOrigin.hostname.endsWith('.vercel.app');
+  } catch {
+    return false;
+  }
+}
+
 const corsOptions = {
-  origin: (process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:5173').split(','),
+  origin: (origin, callback) => {
+    if (isAllowedCorsOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked origin: ${origin}`));
+  },
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],

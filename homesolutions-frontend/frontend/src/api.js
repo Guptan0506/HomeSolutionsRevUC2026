@@ -1,5 +1,9 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
+function isVercelDeployment() {
+  return typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
+}
+
 // JWT Token Management
 const TOKEN_STORAGE_KEY = 'hs_auth_token';
 const TOKEN_EXPIRY_KEY = 'hs_auth_token_expiry';
@@ -62,6 +66,11 @@ export function getAuthHeaders() {
 
 export function buildApiUrl(path) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  if (!API_BASE_URL && isVercelDeployment()) {
+    throw new Error('VITE_API_BASE_URL is not configured for this Vercel deployment. Set it to your Render backend URL and redeploy.');
+  }
+
   return `${API_BASE_URL}${normalizedPath}`;
 }
 
