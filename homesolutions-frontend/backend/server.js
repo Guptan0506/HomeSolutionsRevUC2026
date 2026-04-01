@@ -1042,7 +1042,7 @@ app.get('/api/providers', async (req, res) => {
   try {
     const normalizedLocation = typeof req.query.location === 'string' ? req.query.location.trim() : '';
     const params = [];
-    const filters = [`TRIM(COALESCE(sp.availability, '')) <> ''`];
+    const filters = [];
 
     if (normalizedLocation) {
       params.push(`%${normalizedLocation.toLowerCase()}%`);

@@ -270,7 +270,7 @@ function ServiceProviderProfilePage({
               placeholder="e.g., Wiring, Switch Repair, Circuit Breakers"
             />
 
-            <label className="field-label" htmlFor="provider-availability">Availability (Required to appear in provider list)</label>
+            <label className="field-label" htmlFor="provider-availability">Availability</label>
             <textarea
               id="provider-availability"
               className="input-field profile-input"
