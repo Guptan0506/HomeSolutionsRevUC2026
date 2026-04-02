@@ -1041,6 +1041,7 @@ app.post('/api/auth/login', authRateLimiter.middleware(), async (req, res) => {
 app.get('/api/providers', async (req, res) => {
   try {
     const normalizedLocation = typeof req.query.location === 'string' ? req.query.location.trim() : '';
+    const normalizedServiceType = typeof req.query.serviceType === 'string' ? req.query.serviceType.trim() : '';
     const params = [];
     const filters = [];
 
@@ -1048,6 +1049,25 @@ app.get('/api/providers', async (req, res) => {
       params.push(`%${normalizedLocation.toLowerCase()}%`);
       filters.push(`LOWER(COALESCE(sp.sp_location, '')) LIKE $${params.length}`);
     }
+
+    const serviceSearchTerms = getServiceSearchTerms(normalizedServiceType);
+    if (serviceSearchTerms.length > 0) {
+      const serviceConditions = serviceSearchTerms
+        .map((term, index) => {
+          const paramIndex = params.length + index + 1;
+          return `(
+            LOWER(COALESCE(sp.specialization, '')) LIKE LOWER($${paramIndex}) OR
+            LOWER(COALESCE(sp.services, '')) LIKE LOWER($${paramIndex}) OR
+            LOWER(COALESCE(sp.sp_services, '')) LIKE LOWER($${paramIndex})
+          )`;
+        })
+        .join(' OR ');
+
+      filters.push(`(${serviceConditions})`);
+      params.push(...serviceSearchTerms.map((term) => `%${term}%`));
+    }
+
+    const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
     const result = await pool.query(
       `SELECT
@@ -1067,7 +1087,7 @@ app.get('/api/providers', async (req, res) => {
          ON au.user_id = sp.user_id
          OR LOWER(COALESCE(au.email, '')) = LOWER(COALESCE(sp.sp_email, ''))
        LEFT JOIN service_requests sr ON sr.sp_id = sp.sp_id
-       WHERE ${filters.join(' AND ')}
+       ${whereClause}
        GROUP BY sp.sp_id, au.user_id, au.profile_photo, sp.profile_picture_url
        ORDER BY sp.sp_name ASC`,
       params
@@ -1133,6 +1153,37 @@ app.get('/api/providers/by-user/:user_id', async (req, res) => {
 
 // ==================== LOCATION-BASED DISCOVERY ENDPOINTS ====================
 
+const SERVICE_ALIASES = {
+  painting: ['painting', 'painter', 'paint'],
+  plumbing: ['plumbing', 'plumber'],
+  electrical: ['electrical', 'electric', 'electrician'],
+  electric: ['electrical', 'electric', 'electrician'],
+  landscaping: ['landscaping', 'landscape', 'gardening', 'gardener'],
+  cleaning: ['cleaning', 'cleaner'],
+  carpentry: ['carpentry', 'carpenter', 'woodwork'],
+  roofing: ['roofing', 'roofer'],
+  flooring: ['flooring', 'floor installer'],
+  hvac: ['hvac', 'heating', 'cooling', 'ac'],
+};
+
+function normalizeServiceText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getServiceSearchTerms(serviceLabel) {
+  const normalized = normalizeServiceText(serviceLabel);
+
+  if (!normalized) {
+    return [];
+  }
+
+  const aliases = SERVICE_ALIASES[normalized] || [];
+  return Array.from(new Set([normalized, ...aliases.map(normalizeServiceText)]));
+}
+
 // Search providers near a location with distance calculation
 app.get('/api/providers/search/near', async (req, res) => {
   try {
@@ -1181,12 +1232,21 @@ app.get('/api/providers/search/near', async (req, res) => {
     const params = [lat, lng, maxDistance];
 
     // Filter by service type if provided
-    if (serviceType && serviceType.trim()) {
-      query += ` AND (
-        LOWER(ranked.specialization) LIKE LOWER($${params.length + 1}) OR
-        LOWER(ranked.services) LIKE LOWER($${params.length + 1})
-      )`;
-      params.push(`%${serviceType}%`);
+    const serviceSearchTerms = getServiceSearchTerms(serviceType);
+    if (serviceSearchTerms.length > 0) {
+      const serviceConditions = serviceSearchTerms
+        .map((term, index) => {
+          const paramIndex = params.length + index + 1;
+          return `(
+            LOWER(COALESCE(ranked.specialization, '')) LIKE LOWER($${paramIndex}) OR
+            LOWER(COALESCE(ranked.services, '')) LIKE LOWER($${paramIndex}) OR
+            LOWER(COALESCE(ranked.sp_services, '')) LIKE LOWER($${paramIndex})
+          )`;
+        })
+        .join(' OR ');
+
+      query += ` AND (${serviceConditions})`;
+      params.push(...serviceSearchTerms.map((term) => `%${term}%`));
     }
 
     query += `

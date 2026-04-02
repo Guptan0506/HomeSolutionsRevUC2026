@@ -11,6 +11,50 @@ function getExperience(provider) {
   return `${experience} years`;
 }
 
+const SERVICE_ALIASES = {
+  painting: ['painting', 'painter', 'paint'],
+  plumbing: ['plumbing', 'plumber'],
+  electrical: ['electrical', 'electric', 'electrician'],
+  electric: ['electrical', 'electric', 'electrician'],
+  landscaping: ['landscaping', 'landscape', 'gardening', 'gardener'],
+  cleaning: ['cleaning', 'cleaner'],
+  carpentry: ['carpentry', 'carpenter', 'woodwork'],
+  roofing: ['roofing', 'roofer'],
+  flooring: ['flooring', 'floor installer'],
+  hvac: ['hvac', 'heating', 'cooling', 'ac'],
+};
+
+function normalizeServiceText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getServiceSearchTerms(serviceLabel) {
+  const normalized = normalizeServiceText(serviceLabel);
+
+  if (!normalized) {
+    return [];
+  }
+
+  const aliases = SERVICE_ALIASES[normalized] || [];
+  return Array.from(new Set([normalized, ...aliases.map(normalizeServiceText)]));
+}
+
+function providerMatchesService(provider, serviceLabel) {
+  const searchTerms = getServiceSearchTerms(serviceLabel);
+
+  if (searchTerms.length === 0) {
+    return true;
+  }
+
+  const specialization = normalizeServiceText(provider.specialization || provider.service_type || '');
+  const listedServices = normalizeServiceText(provider.services || provider.sp_services || '');
+
+  return searchTerms.some((term) => specialization.includes(term) || listedServices.includes(term));
+}
+
 function ServiceProviderSelectionPage({ selectedService, customerLocation, onBookNow }) {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,15 +114,7 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
 
     // Filter by service selection
     if (selectedService) {
-      const normalizedService = selectedService.toLowerCase();
-      filtered = filtered.filter((provider) => {
-        const specialization = String(provider.specialization || provider.service_type || '').toLowerCase();
-        const listedServices = String(provider.services || provider.sp_services || '').toLowerCase();
-        return specialization.includes(normalizedService) || listedServices.includes(normalizedService);
-      });
-      if (filtered.length === 0) {
-        filtered = [...providers];
-      }
+      filtered = filtered.filter((provider) => providerMatchesService(provider, selectedService));
     }
 
     // Filter by search query (name + service)
@@ -86,8 +122,8 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
       const query = searchQuery.trim().toLowerCase();
       filtered = filtered.filter((provider) => {
         const name = String(provider.sp_name || provider.full_name || '').toLowerCase();
-        const specialization = String(provider.specialization || provider.service_type || '').toLowerCase();
-        const services = String(provider.services || provider.sp_services || '').toLowerCase();
+        const specialization = normalizeServiceText(provider.specialization || provider.service_type || '');
+        const services = normalizeServiceText(provider.services || provider.sp_services || '');
         return name.includes(query) || specialization.includes(query) || services.includes(query);
       });
     }

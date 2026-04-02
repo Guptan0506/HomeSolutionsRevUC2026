@@ -11,13 +11,16 @@ function ProvidersList({ onSelect }) {
   const [distanceFilter, setDistanceFilter] = useState(50);
   const [serviceTypeFilter, setServiceTypeFilter] = useState('');
 
-  const searchNearby = useCallback(async (latitude, longitude) => {
+  const searchNearby = useCallback(async (latitude, longitude, overrides = {}) => {
     try {
+      const distance = overrides.distance ?? distanceFilter;
+      const serviceType = overrides.serviceType ?? serviceTypeFilter;
+
       const params = new URLSearchParams({
         latitude,
         longitude,
-        distance: distanceFilter,
-        ...(serviceTypeFilter && { serviceType: serviceTypeFilter }),
+        distance,
+        ...(serviceType && { serviceType }),
       });
 
       const response = await fetch(buildApiUrl(`/api/providers/search/near?${params}`));
@@ -36,9 +39,17 @@ function ProvidersList({ onSelect }) {
     }
   }, [distanceFilter, serviceTypeFilter]);
 
-  const fetchAllProviders = useCallback(async () => {
+  const fetchAllProviders = useCallback(async (overrides = {}) => {
     try {
-      const response = await fetch(buildApiUrl('/api/providers'));
+      const params = new URLSearchParams();
+      const serviceType = overrides.serviceType ?? serviceTypeFilter;
+
+      if (serviceType) {
+        params.set('serviceType', serviceType);
+      }
+
+      const url = params.toString() ? buildApiUrl(`/api/providers?${params.toString()}`) : buildApiUrl('/api/providers');
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error('Failed to fetch providers');
@@ -52,7 +63,7 @@ function ProvidersList({ onSelect }) {
       setError('Could not connect to the service database.');
       setLoading(false);
     }
-  }, []);
+  }, [serviceTypeFilter]);
 
   useEffect(() => {
     const fetchProviders = async () => {
@@ -66,15 +77,18 @@ function ProvidersList({ onSelect }) {
             async (position) => {
               const { latitude, longitude } = position.coords;
               setUserLocation({ latitude, longitude });
-              await searchNearby(latitude, longitude);
+              await searchNearby(latitude, longitude, {
+                distance: distanceFilter,
+                serviceType: serviceTypeFilter,
+              });
             },
             async () => {
               console.log('Geolocation denied, fetching all providers');
-              await fetchAllProviders();
+              await fetchAllProviders({ serviceType: serviceTypeFilter });
             }
           );
         } else {
-          await fetchAllProviders();
+          await fetchAllProviders({ serviceType: serviceTypeFilter });
         }
       } catch (err) {
         console.error('Fetch error:', err);
@@ -84,13 +98,16 @@ function ProvidersList({ onSelect }) {
     };
 
     fetchProviders();
-  }, [useGeolocation, searchNearby, fetchAllProviders]);
+  }, [useGeolocation, searchNearby, fetchAllProviders, distanceFilter, serviceTypeFilter]);
 
   const handleFilterChange = async () => {
     if (userLocation) {
-      await searchNearby(userLocation.latitude, userLocation.longitude);
+      await searchNearby(userLocation.latitude, userLocation.longitude, {
+        distance: distanceFilter,
+        serviceType: serviceTypeFilter,
+      });
     } else {
-      await fetchAllProviders();
+      await fetchAllProviders({ serviceType: serviceTypeFilter });
     }
   };
 
@@ -125,8 +142,14 @@ function ProvidersList({ onSelect }) {
             id="distance-filter"
             value={distanceFilter}
             onChange={(e) => {
-              setDistanceFilter(parseInt(e.target.value));
-              handleFilterChange();
+              const nextDistance = parseInt(e.target.value, 10);
+              setDistanceFilter(nextDistance);
+              if (userLocation) {
+                searchNearby(userLocation.latitude, userLocation.longitude, {
+                  distance: nextDistance,
+                  serviceType: serviceTypeFilter,
+                });
+              }
             }}
             className="filter-select"
           >
