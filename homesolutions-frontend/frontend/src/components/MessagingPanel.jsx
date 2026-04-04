@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { buildApiUrl, getApiErrorMessage, readJsonSafely } from '../api';
+import { buildApiUrl, getApiErrorMessage, getAuthHeaders, readJsonSafely } from '../api';
 
 function MessagingPanel({ requestId, otherPartyId, currentUser, otherPartyName, onClose }) {
   const [messages, setMessages] = useState([]);
@@ -27,7 +27,7 @@ function MessagingPanel({ requestId, otherPartyId, currentUser, otherPartyName, 
 
       try {
         const response = await fetch(buildApiUrl(`/api/messages/${requestId}`), {
-          headers: { 'x-user-id': String(currentUser.user_id) },
+          headers: getAuthHeaders(),
         });
 
         const data = await readJsonSafely(response);
@@ -44,7 +44,7 @@ function MessagingPanel({ requestId, otherPartyId, currentUser, otherPartyName, 
             if (!msg.is_read && msg.recipient_id === currentUser.user_id) {
               fetch(buildApiUrl(`/api/messages/${msg.message_id}/read`), {
                 method: 'PATCH',
-                headers: { 'x-user-id': String(currentUser.user_id) },
+                headers: getAuthHeaders(),
               }).catch(() => {}); // Silently fail if marking read fails
             }
           });
@@ -111,10 +111,7 @@ function MessagingPanel({ requestId, otherPartyId, currentUser, otherPartyName, 
 
       const response = await fetch(buildApiUrl('/api/messages'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': String(currentUser.user_id),
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 

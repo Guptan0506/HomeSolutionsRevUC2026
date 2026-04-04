@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { buildApiUrl, getApiErrorMessage, readJsonSafely } from '../api';
+import { buildApiUrl, getApiErrorMessage, getAuthHeaders, readJsonSafely } from '../api';
 
 function RequestForm({ currentUser, selectedProvider, selectedService, onBack, onSuccess }) {
   const [requestTitle, setRequestTitle] = useState(selectedService || '');
@@ -189,7 +189,7 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
 
       const response = await fetch(buildApiUrl('/api/requests-multi'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 
