@@ -13,7 +13,7 @@ import ServiceInvoicePage from "./components/ServiceInvoicePage";
 import TroubleshootChatbot from "./components/TroubleshootChatbot";
 import Toast from "./components/Toast";
 import AdminDashboardPage from "./components/AdminDashboardPage";
-import { buildApiUrl, getApiErrorMessage, readJsonSafely, setAuthToken, clearAuthToken } from "./api";
+import { buildApiUrl, getApiErrorMessage, getAuthHeaders, readJsonSafely, setAuthToken, clearAuthToken } from "./api";
 
 const featuredProfessionals = [
   {
@@ -138,7 +138,9 @@ function App() {
 
   const fetchCustomerRequests = async (userId) => {
     try {
-      const response = await fetch(buildApiUrl(`/api/requests/user/${userId}`));
+      const response = await fetch(buildApiUrl(`/api/requests/user/${userId}`), {
+        headers: getAuthHeaders(),
+      });
       const data = await readJsonSafely(response);
 
       if (!response.ok || !Array.isArray(data)) {
@@ -159,7 +161,9 @@ function App() {
     }
 
     try {
-      const response = await fetch(buildApiUrl(`/api/requests/provider/${spId}`));
+      const response = await fetch(buildApiUrl(`/api/requests/provider/${spId}`), {
+        headers: getAuthHeaders(),
+      });
       const data = await readJsonSafely(response);
 
       if (!response.ok || !Array.isArray(data)) {
@@ -191,7 +195,9 @@ function App() {
 
       if (!spId) {
         try {
-          const response = await fetch(buildApiUrl(`/api/providers/by-user/${currentUser.user_id}`));
+          const response = await fetch(buildApiUrl(`/api/providers/by-user/${currentUser.user_id}`), {
+            headers: getAuthHeaders(),
+          });
           const provider = await readJsonSafely(response);
 
           if (response.ok && provider?.sp_id) {
@@ -344,7 +350,7 @@ function App() {
     try {
       const response = await fetch(buildApiUrl(`/api/users/${currentUser.user_id}/profile`), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           ...updatedUser,
           user_role: currentUser.user_role,
@@ -380,7 +386,7 @@ function App() {
     try {
       const response = await fetch(buildApiUrl(`/api/requests/${requestId}/customer`), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           payment_method: updates.paymentMethod,
           payment_method_saved: updates.paymentMethodSaved,
@@ -445,7 +451,7 @@ function App() {
 
       const response = await fetch(buildApiUrl(`/api/requests/${requestId}/provider`), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           action,
           estimated_time: updates.estimatedTime,
@@ -479,7 +485,9 @@ function App() {
 
   const handleViewInvoice = async (request) => {
     try {
-      const response = await fetch(buildApiUrl(`/api/invoices/${request.requestId}`));
+      const response = await fetch(buildApiUrl(`/api/invoices/${request.requestId}`), {
+        headers: getAuthHeaders(),
+      });
       const data = await readJsonSafely(response);
 
       if (!response.ok) {
