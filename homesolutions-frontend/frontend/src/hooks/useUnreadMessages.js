@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { buildApiUrl } from '../api';
+import { buildApiUrl, getAuthHeaders } from '../api';
 
 /**
  * Custom hook to fetch and track unread message counts per request
@@ -19,7 +19,8 @@ export function useUnreadMessages(userId, shouldFetch = true) {
       setLoading(true);
       try {
         const response = await fetch(
-          buildApiUrl(`/api/messages/unread-count/${userId}`)
+          buildApiUrl(`/api/messages/unread-count/${userId}`),
+          { headers: getAuthHeaders() }
         );
         
         if (!response.ok) {
