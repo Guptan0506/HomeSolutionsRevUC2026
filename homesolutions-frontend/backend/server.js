@@ -2031,10 +2031,10 @@ app.post('/api/messages', requireAuth, async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO messages (request_id, sender_id, sender_role, recipient_id, message_text)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO messages (request_id, sender_id, sender_role, sender_type, recipient_id, message_text)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [rid, sid, sender_role || 'customer', recid, trimmedMessage]
+      [rid, sid, sender_role || 'customer', sender_role || 'customer', recid, trimmedMessage]
     );
 
     // Fetch recipient and sender info to send notification
