@@ -2048,11 +2048,13 @@ app.post('/api/messages', requireAuth, async (req, res) => {
       [sid]
     );
 
-    // Send notification to recipient
+    // Send notification to recipient (async, don't await to keep response fast)
     if (recipientInfo.rows.length > 0 && senderInfo.rows.length > 0) {
       const { email: recipient_email, full_name: recipient_name } = recipientInfo.rows[0];
       const { full_name: sender_name } = senderInfo.rows[0];
-      notifyNewMessage(recipient_email, recipient_name, sender_name);
+      notifyNewMessage(recipient_email, recipient_name, sender_name).catch(err => {
+        console.warn('Failed to send message notification:', err.message);
+      });
     }
 
     res.json(result.rows[0]);
