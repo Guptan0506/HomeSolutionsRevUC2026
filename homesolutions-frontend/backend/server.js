@@ -469,6 +469,7 @@ const initializeMessagesTable = async () => {
     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS request_id INTEGER REFERENCES service_requests(request_id) ON DELETE CASCADE`);
     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL`);
     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_role VARCHAR(50)`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_type VARCHAR(50) NOT NULL DEFAULT 'customer'`);
     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS recipient_id INTEGER REFERENCES app_users(user_id) ON DELETE SET NULL`);
     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_text TEXT NOT NULL`);
     await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE`);
