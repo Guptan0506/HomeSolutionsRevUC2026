@@ -2021,22 +2021,31 @@ app.post('/api/messages', requireAuth, async (req, res) => {
 
     const trimmedMessage = message_text.trim();
     
+    // Ensure IDs are integers
+    const rid = Number(request_id);
+    const sid = Number(sender_id);
+    const recid = Number(recipient_id);
+
+    if (!Number.isInteger(rid) || !Number.isInteger(sid) || !Number.isInteger(recid)) {
+      return res.status(400).json({ message: 'request_id, sender_id, and recipient_id must be valid integers.' });
+    }
+
     const result = await pool.query(
       `INSERT INTO messages (request_id, sender_id, sender_role, recipient_id, message_text)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [request_id, sender_id, sender_role || 'customer', recipient_id, trimmedMessage]
+      [rid, sid, sender_role || 'customer', recid, trimmedMessage]
     );
 
     // Fetch recipient and sender info to send notification
     const recipientInfo = await pool.query(
       `SELECT au.email, au.full_name FROM app_users au WHERE au.user_id = $1`,
-      [recipient_id]
+      [recid]
     );
 
     const senderInfo = await pool.query(
       `SELECT au.full_name FROM app_users au WHERE au.user_id = $1`,
-      [sender_id]
+      [sid]
     );
 
     // Send notification to recipient
@@ -2048,8 +2057,13 @@ app.post('/api/messages', requireAuth, async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    console.error('Message API Error:', {
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      stack: err.stack.split('\n')[0],
+    });
+    res.status(500).json({ message: 'Server Error. Failed to send message.' });
   }
 });
 
