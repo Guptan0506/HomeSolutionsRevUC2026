@@ -593,6 +593,10 @@ body {
   gap: 10px;
 }
 
+.provider-selection-avatar-wrap {
+  flex-shrink: 0;
+}
+
 .provider-selection-avatar {
   width: 52px;
   height: 52px;
@@ -612,6 +616,11 @@ body {
   font-weight: 700;
 }
 
+.provider-selection-avatar-fallback svg {
+  width: 22px;
+  height: 22px;
+}
+
 .provider-selection-name {
   font-size: 20px;
   font-weight: 700;
@@ -623,6 +632,21 @@ body {
   font-size: 15px;
   color: var(--accent-ocean);
   font-weight: 600;
+}
+
+.provider-selection-chip {
+  margin-top: 5px;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(44, 95, 138, 0.10);
+  color: var(--accent-ocean);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .provider-selection-rate {

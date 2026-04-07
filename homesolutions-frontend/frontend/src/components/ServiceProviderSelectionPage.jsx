@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { FaBolt, FaDroplet, FaHammer, FaLeaf, FaPaintRoller, FaBroom, FaHouseChimney, FaShieldHalved, FaLock, FaBug, FaTree, FaToolbox, FaWrench } from 'react-icons/fa6';
 import { buildApiUrl, getApiErrorMessage, readJsonSafely } from '../api';
 
 function formatHourlyRate(provider) {
@@ -62,6 +63,34 @@ function providerMatchesService(provider, serviceLabel) {
   const listedServices = normalizeServiceText(provider.services || provider.sp_services || '');
 
   return searchTerms.some((term) => specialization.includes(term) || listedServices.includes(term));
+}
+
+const PROVIDER_SERVICE_META = [
+  { match: ['electrical', 'electric'], icon: FaBolt, tag: 'Emergency' },
+  { match: ['plumbing'], icon: FaDroplet, tag: 'Emergency' },
+  { match: ['hvac', 'heating', 'cooling', 'ac'], icon: FaHouseChimney, tag: 'Seasonal' },
+  { match: ['appliance repair', 'appliance'], icon: FaToolbox, tag: 'Popular' },
+  { match: ['carpentry', 'carpenter', 'woodwork'], icon: FaHammer, tag: 'Custom' },
+  { match: ['painting', 'painter', 'paint'], icon: FaPaintRoller, tag: 'Popular' },
+  { match: ['landscaping', 'landscape', 'gardening', 'gardener'], icon: FaLeaf, tag: 'Seasonal' },
+  { match: ['cleaning', 'cleaner'], icon: FaBroom, tag: 'Recurring' },
+  { match: ['roofing', 'roofer'], icon: FaHouseChimney, tag: 'Priority' },
+  { match: ['flooring', 'floor installer'], icon: FaHammer, tag: 'Upgrade' },
+  { match: ['handyman', 'general repair', 'maintenance'], icon: FaWrench, tag: 'Popular' },
+  { match: ['pest control', 'pest', 'extermination'], icon: FaBug, tag: 'Urgent' },
+  { match: ['home security', 'security', 'alarm', 'smart lock', 'cameras'], icon: FaShieldHalved, tag: 'Smart Home' },
+  { match: ['drywall', 'insulation', 'sheetrock', 'patching'], icon: FaHammer, tag: 'Repair' },
+  { match: ['window cleaning', 'window washer', 'windows'], icon: FaBroom, tag: 'Recurring' },
+  { match: ['tree trimming', 'tree removal', 'arborist', 'tree care'], icon: FaTree, tag: 'Seasonal' },
+  { match: ['pool', 'spa', 'pool maintenance', 'pool service'], icon: FaDroplet, tag: 'Luxury' },
+  { match: ['locksmith', 'lock', 'rekey', 'key replacement'], icon: FaLock, tag: 'Emergency' },
+];
+
+function getProviderServiceMeta(serviceLabel) {
+  const normalized = normalizeServiceText(serviceLabel);
+  const found = PROVIDER_SERVICE_META.find((entry) => entry.match.some((term) => normalized.includes(normalizeServiceText(term))));
+
+  return found || { icon: FaToolbox, tag: 'Home Service' };
 }
 
 function ServiceProviderSelectionPage({ selectedService, customerLocation, onBookNow }) {
@@ -259,6 +288,8 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
           {visibleProviders.map((provider) => {
             const providerName = provider.sp_name || provider.full_name || 'Professional';
             const providerService = provider.specialization || provider.services || provider.sp_services || provider.service_type || 'General Home Service';
+            const providerMeta = getProviderServiceMeta(providerService);
+            const ProviderIcon = providerMeta.icon || FaToolbox;
             const providerId = provider.sp_id || provider.id;
             const providerPhoto = provider.profile_picture_url || provider.provider_photo || provider.profile_photo || '';
             const providerInitial = (providerName || 'P').trim().charAt(0).toUpperCase();
@@ -268,14 +299,17 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
               <article className="card provider-selection-card" key={providerId}>
                 <div className="provider-selection-head">
                   <div className="provider-selection-identity">
-                    {providerPhoto ? (
-                      <img src={providerPhoto} alt={providerName} className="provider-selection-avatar" />
-                    ) : (
-                      <div className="provider-selection-avatar provider-selection-avatar-fallback">{providerInitial}</div>
-                    )}
+                    <div className="provider-selection-avatar-wrap">
+                      {providerPhoto ? (
+                        <img src={providerPhoto} alt={providerName} className="provider-selection-avatar" />
+                      ) : (
+                        <div className="provider-selection-avatar provider-selection-avatar-fallback"><ProviderIcon aria-hidden="true" /></div>
+                      )}
+                    </div>
                     <div>
                       <p className="provider-selection-name">{providerName}</p>
                       <p className="provider-selection-service">{providerService}</p>
+                      <p className="provider-selection-chip">{providerMeta.tag || 'Home Service'}</p>
                     </div>
                   </div>
                   <p className="provider-selection-rate">{formatHourlyRate(provider)}</p>
