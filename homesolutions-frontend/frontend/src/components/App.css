@@ -472,6 +472,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  animation: riseIn 560ms ease-out both;
 }
 
 .service-item:hover {
@@ -573,6 +574,7 @@ body {
 .provider-selection-card {
   margin-bottom: 0;
   transition: box-shadow 200ms ease, transform 200ms ease;
+  animation: riseIn 560ms ease-out both;
 }
 
 .provider-selection-card:hover {
@@ -1257,6 +1259,7 @@ body {
   padding: 18px 20px;
   border: 1px solid #d9e7f3;
   background: linear-gradient(135deg, #f8fbff 0%, #eef5fb 100%);
+  animation: riseIn 460ms ease-out both;
 }
 
 .request-service-summary-head {
@@ -1687,6 +1690,7 @@ body {
   background: linear-gradient(135deg, #fff9f0, #fef5f0);
   border: 1px solid #f5dcc8;
   border-radius: 10px;
+  animation: riseIn 420ms ease-out both;
 }
 
 .chatbot-request-head {

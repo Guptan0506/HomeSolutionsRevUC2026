@@ -688,11 +688,15 @@ function App() {
               <section className="services-section" aria-label="Services" ref={servicesSectionRef}>
                 <div className="sec-label">Services</div>
                 <div className="services-grid">
-                  {serviceCatalog.map((service) => {
+                  {serviceCatalog.map((service, index) => {
                     const ServiceIcon = service.icon || FaToolbox;
 
                     return (
-                    <article key={service.name} className="service-item card">
+                    <article
+                      key={service.name}
+                      className="service-item card"
+                      style={{ animationDelay: `${index * 45}ms` }}
+                    >
                       <div className="service-item-head">
                         <div className="service-badge">
                           <ServiceIcon aria-hidden="true" />

@@ -285,7 +285,7 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
 
       {!loading && !error && (
         <div className="provider-selection-grid">
-          {visibleProviders.map((provider) => {
+          {visibleProviders.map((provider, index) => {
             const providerName = provider.sp_name || provider.full_name || 'Professional';
             const providerService = provider.specialization || provider.services || provider.sp_services || provider.service_type || 'General Home Service';
             const providerMeta = getProviderServiceMeta(providerService);
@@ -296,7 +296,7 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
             const providerAvailability = provider.availability || 'Availability not provided';
 
             return (
-              <article className="card provider-selection-card" key={providerId}>
+              <article className="card provider-selection-card" key={providerId} style={{ animationDelay: `${index * 45}ms` }}>
                 <div className="provider-selection-head">
                   <div className="provider-selection-identity">
                     <div className="provider-selection-avatar-wrap">
