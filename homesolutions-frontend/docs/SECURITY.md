@@ -4,7 +4,7 @@
 
 This document outlines the security features implemented in HomeSolutions to protect user data, prevent unauthorized access, and ensure safe communication.
 
-## 🔐 Security Features Implemented
+## Security Features
 
 ### 1. **JWT Token-Based Authentication**
 - **What**: JSON Web Tokens replace localStorage-only authentication
@@ -100,7 +100,7 @@ const response = await fetch('/api/profile', {
 });
 ```
 
-## 🛡️ Protection Against Common Attacks
+## Protection Against Common Attacks
 
 | Attack | Prevention |
 |--------|-----------|
@@ -114,7 +114,7 @@ const response = await fetch('/api/profile', {
 | **Clickjacking** | X-Frame-Options header |
 | **MIME Sniffing** | X-Content-Type-Options header |
 
-## 📋 Configuration
+## Configuration
 
 ### Environment Variables (.env)
 ```bash
@@ -145,7 +145,7 @@ Inform users on signup page about requirements:
 - ✓ At least one number
 - ✓ At least one special character (!@#$%^&*()_+...)
 
-## 🔄 Frontend Implementation
+## Frontend Implementation
 
 ### Token Storage & Management
 Frontend provides helper functions in `api.js`:
@@ -178,7 +178,7 @@ Tokens are automatically:
 - Removed from localStorage if expired
 - Null returned if not found or expired
 
-## 🚀 Installation & Deployment
+## Installation and Deployment
 
 ### Install Dependencies
 ```bash
@@ -227,7 +227,7 @@ CORS_ALLOWED_ORIGINS=https://your-app.vercel.app,https://your-custom-domain.com
 - [ ] Database backups configured
 - [ ] Monitoring/logging enabled
 
-## 🔍 Testing Security
+## Security Testing
 
 ### Test Rate Limiting
 ```bash
@@ -266,14 +266,14 @@ curl -X POST http://localhost:5001/api/auth/signup \
   }'
 ```
 
-## 📚 Additional Resources
+## Additional Resources
 
 - [JWT.io - JWT Introduction](https://jwt.io/introduction)
 - [OWASP Top 10 Security Risks](https://owasp.org/Top10/)
 - [Helmet.js Documentation](https://helmetjs.github.io/)
 - [bcryptjs Documentation](https://github.com/dcodeIO/bcrypt.js)
 
-## ⚠️ Known Limitations & Future Improvements
+## Known Limitations and Future Improvements
 
 **Current State (Phase 4):**
 - ✅ JWT authentication

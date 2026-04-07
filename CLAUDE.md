@@ -99,7 +99,7 @@ All styles live in `frontend/src/components/App.css`. Key design tokens (CSS var
 
 ## Security (Phase 4)
 
-See [SECURITY.md](./SECURITY.md) for comprehensive security documentation.
+See [SECURITY.md](./homesolutions-frontend/docs/SECURITY.md) for comprehensive security documentation.
 
 **Key Features:**
 - JWT token-based authentication (7-day expiry)
