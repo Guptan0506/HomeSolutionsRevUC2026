@@ -1447,12 +1447,13 @@ app.get('/api/providers/:spId/trust', async (req, res) => {
 });
 
 // Test endpoint: Check database contents
-app.get('/api/test-db', async (req, res) => {
+// DEBUG ENDPOINT: Test database connectivity (admin only)
+app.get('/api/test-db', requireAuth, requireAdmin, async (req, res) => {
   try {
     const usersResult = await pool.query(
       'SELECT user_id, full_name, email, user_role, created_at FROM app_users'
     );
-    const providersResult = await pool.query('SELECT * FROM service_provider');
+    const providersResult = await pool.query('SELECT sp_id, sp_name, user_id, specialization FROM service_provider');
     
     res.json({
       app_users_count: usersResult.rows.length,
@@ -1466,7 +1467,8 @@ app.get('/api/test-db', async (req, res) => {
 });
 
 // GET all users
-app.get('/api/users', async (req, res) => {
+// ADMIN ONLY: Get all users (protected endpoint)
+app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT user_id, full_name, email, user_role, phone, profile_photo, created_at FROM app_users ORDER BY full_name ASC'
@@ -1479,9 +1481,16 @@ app.get('/api/users', async (req, res) => {
 });
 
 // PUT profile updates (customer and service provider)
-app.put('/api/users/:user_id/profile', async (req, res) => {
+app.put('/api/users/:user_id/profile', requireAuth, async (req, res) => {
   try {
     const { user_id } = req.params;
+    const authenticatedUserId = req.user.user_id;
+
+    // Verify user can only modify their own profile
+    if (parseInt(user_id, 10) !== authenticatedUserId) {
+      return res.status(403).json({ message: 'Not authorized to modify this profile.' });
+    }
+
     const {
       full_name,
       email,
@@ -1579,11 +1588,17 @@ const toMoney = (value) => Number(Number(value || 0).toFixed(2));
 app.post('/api/requests', requireAuth, async (req, res) => {
   try {
     const { user_id, sp_id, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude } = req.body;
+    const authenticatedUserId = req.user.user_id;
     const normalizedUrgency = String(urgency || 'low').trim().toLowerCase();
 
     const safeUrgency = ['low', 'medium', 'high'].includes(normalizedUrgency)
       ? normalizedUrgency
       : 'low';
+
+    // Verify authenticated user can only create requests for themselves
+    if (parseInt(user_id, 10) !== authenticatedUserId) {
+      return res.status(403).json({ message: 'You can only create requests for yourself.' });
+    }
 
     if (!user_id || !sp_id || !service_name) {
       return res.status(400).json({ message: 'user_id, sp_id, and service_name are required.' });
@@ -1606,11 +1621,17 @@ app.post('/api/requests', requireAuth, async (req, res) => {
 app.post('/api/requests-multi', requireAuth, async (req, res) => {
   try {
     const { user_id, sp_ids, service_name, date_required, urgency, description, attachment_url, work_address, work_latitude, work_longitude } = req.body;
+    const authenticatedUserId = req.user.user_id;
     const normalizedUrgency = String(urgency || 'low').trim().toLowerCase();
 
     const safeUrgency = ['low', 'medium', 'high'].includes(normalizedUrgency)
       ? normalizedUrgency
       : 'low';
+
+    // Verify authenticated user can only create requests for themselves
+    if (parseInt(user_id, 10) !== authenticatedUserId) {
+      return res.status(403).json({ message: 'You can only create requests for yourself.' });
+    }
 
     if (!user_id || !sp_ids || !Array.isArray(sp_ids) || sp_ids.length === 0) {
       return res.status(400).json({ message: 'user_id and sp_ids array (at least 1 provider) are required.' });
@@ -1655,6 +1676,13 @@ app.post('/api/requests-multi', requireAuth, async (req, res) => {
 app.get('/api/requests/user/:user_id', requireAuth, async (req, res) => {
   try {
     const { user_id } = req.params;
+    const authenticatedUserId = req.user.user_id;
+
+    // Verify user can only access their own requests
+    if (parseInt(user_id, 10) !== authenticatedUserId) {
+      return res.status(403).json({ message: 'Not authorized to access these requests.' });
+    }
+
     const result = await pool.query(
       `SELECT
          sr.request_id,
@@ -1698,10 +1726,25 @@ app.get('/api/requests/user/:user_id', requireAuth, async (req, res) => {
 });
 
 // PATCH customer-side request updates (payment method, rating)
-app.patch('/api/requests/:id/customer', async (req, res) => {
+app.patch('/api/requests/:id/customer', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { payment_method, payment_method_saved, customer_rating } = req.body;
+    const authenticatedUserId = req.user.user_id;
+
+    // Verify customer owns this request
+    const ownershipCheck = await pool.query(
+      'SELECT user_id FROM service_requests WHERE request_id = $1',
+      [id]
+    );
+
+    if (ownershipCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Request not found.' });
+    }
+
+    if (ownershipCheck.rows[0].user_id !== authenticatedUserId) {
+      return res.status(403).json({ message: 'Not authorized to modify this request.' });
+    }
 
     const result = await pool.query(
       `UPDATE service_requests
@@ -1728,6 +1771,18 @@ app.patch('/api/requests/:id/customer', async (req, res) => {
 app.get('/api/requests/provider/:sp_id', requireAuth, async (req, res) => {
   try {
     const { sp_id } = req.params;
+    const authenticatedUserId = req.user.user_id;
+
+    // Verify user owns this provider profile
+    const providerCheck = await pool.query(
+      'SELECT user_id FROM service_provider WHERE sp_id = $1',
+      [sp_id]
+    );
+
+    if (providerCheck.rows.length === 0 || providerCheck.rows[0].user_id !== authenticatedUserId) {
+      return res.status(403).json({ message: 'Not authorized to access these requests.' });
+    }
+
     const result = await pool.query(
       `SELECT
          sr.request_id,
@@ -1771,9 +1826,10 @@ app.get('/api/requests/provider/:sp_id', requireAuth, async (req, res) => {
 });
 
 // PATCH provider lifecycle updates: accept/decline/complete
-app.patch('/api/requests/:id/provider', async (req, res) => {
+app.patch('/api/requests/:id/provider', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const authenticatedUserId = req.user.user_id;
     const {
       action,
       estimated_time,
@@ -1790,6 +1846,18 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
       'SELECT request_id, user_id, sp_id, submitted_at FROM service_requests WHERE request_id = $1',
       [id]
     );
+
+    // Verify provider owns this request
+    if (requestLookup.rows.length > 0) {
+      const providerOwnershipCheck = await pool.query(
+        'SELECT sp_id FROM service_provider WHERE sp_id = $1 AND user_id = $2',
+        [requestLookup.rows[0].sp_id, authenticatedUserId]
+      );
+
+      if (providerOwnershipCheck.rows.length === 0) {
+        return res.status(403).json({ message: 'Not authorized to modify this request.' });
+      }
+    }
 
     if (requestLookup.rows.length === 0) {
       return res.status(404).json({ message: 'Request not found.' });
@@ -1985,9 +2053,38 @@ app.patch('/api/requests/:id/provider', async (req, res) => {
 });
 
 // GET invoice by request ID
-app.get('/api/invoices/:request_id', async (req, res) => {
+app.get('/api/invoices/:request_id', requireAuth, async (req, res) => {
   try {
     const { request_id } = req.params;
+    const authenticatedUserId = req.user.user_id;
+
+    // First, fetch the invoice with request details
+    const invoiceCheckResult = await pool.query(
+      `SELECT i.*, sr.user_id as customer_id, sr.sp_id
+       FROM invoices i
+       LEFT JOIN service_requests sr ON sr.request_id = i.request_id
+       WHERE i.request_id = $1`,
+      [request_id]
+    );
+
+    if (invoiceCheckResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Invoice not found.' });
+    }
+
+    const invoice = invoiceCheckResult.rows[0];
+    const { customer_id, sp_id } = invoice;
+
+    // Verify user is either the customer or the service provider
+    const isCustomer = customer_id === authenticatedUserId;
+    const isProvider = sp_id ? await pool.query(
+      'SELECT sp_id FROM service_provider WHERE sp_id = $1 AND user_id = $2',
+      [sp_id, authenticatedUserId]
+    ).then(r => r.rows.length > 0) : false;
+
+    if (!isCustomer && !isProvider) {
+      return res.status(403).json({ message: 'Not authorized to view this invoice.' });
+    }
+
     const result = await pool.query(
       `SELECT
          i.*, sr.service_name, sr.description, sr.work_address,
@@ -2000,10 +2097,6 @@ app.get('/api/invoices/:request_id', async (req, res) => {
       [request_id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Invoice not found.' });
-    }
-
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err.message);
@@ -2015,6 +2108,12 @@ app.get('/api/invoices/:request_id', async (req, res) => {
 app.post('/api/messages', requireAuth, async (req, res) => {
   try {
     const { request_id, sender_id, sender_role, recipient_id, message_text } = req.body;
+    const authenticatedUserId = req.user.user_id;
+
+    // Verify authenticated user can only send messages as themselves
+    if (parseInt(sender_id, 10) !== authenticatedUserId) {
+      return res.status(403).json({ message: 'You can only send messages as yourself.' });
+    }
 
     if (!request_id || !sender_id || !recipient_id || !message_text?.trim()) {
       return res.status(400).json({ message: 'request_id, sender_id, recipient_id, and message_text are required.' });
@@ -2074,6 +2173,28 @@ app.post('/api/messages', requireAuth, async (req, res) => {
 app.get('/api/messages/:request_id', requireAuth, async (req, res) => {
   try {
     const { request_id } = req.params;
+    const authenticatedUserId = req.user.user_id;
+
+    // Verify user is either customer or service provider for this request
+    const requestCheck = await pool.query(
+      'SELECT user_id, sp_id FROM service_requests WHERE request_id = $1',
+      [request_id]
+    );
+
+    if (requestCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Request not found.' });
+    }
+
+    const { user_id: customerId, sp_id } = requestCheck.rows[0];
+    const isCustomer = customerId === authenticatedUserId;
+    const isProvider = sp_id ? await pool.query(
+      'SELECT sp_id FROM service_provider WHERE sp_id = $1 AND user_id = $2',
+      [sp_id, authenticatedUserId]
+    ).then(r => r.rows.length > 0) : false;
+
+    if (!isCustomer && !isProvider) {
+      return res.status(403).json({ message: 'Not authorized to access these messages.' });
+    }
 
     const result = await pool.query(
       `SELECT
@@ -2098,6 +2219,12 @@ app.get('/api/messages/:request_id', requireAuth, async (req, res) => {
 app.get('/api/messages/unread-count/:user_id', requireAuth, async (req, res) => {
   try {
     const { user_id } = req.params;
+    const authenticatedUserId = req.user.user_id;
+
+    // Verify user can only access their own unread counts
+    if (parseInt(user_id, 10) !== authenticatedUserId) {
+      return res.status(403).json({ message: 'Not authorized to access unread messages.' });
+    }
 
     const result = await pool.query(
       `SELECT request_id, COUNT(*) as unread_count
@@ -2124,6 +2251,21 @@ app.get('/api/messages/unread-count/:user_id', requireAuth, async (req, res) => 
 app.patch('/api/messages/:message_id/read', requireAuth, async (req, res) => {
   try {
     const { message_id } = req.params;
+    const authenticatedUserId = req.user.user_id;
+
+    // Verify authenticated user is the recipient of this message
+    const messageCheck = await pool.query(
+      'SELECT recipient_id FROM messages WHERE message_id = $1',
+      [message_id]
+    );
+
+    if (messageCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Message not found.' });
+    }
+
+    if (messageCheck.rows[0].recipient_id !== authenticatedUserId) {
+      return res.status(403).json({ message: 'You can only mark your own messages as read.' });
+    }
 
     const result = await pool.query(
       `UPDATE messages

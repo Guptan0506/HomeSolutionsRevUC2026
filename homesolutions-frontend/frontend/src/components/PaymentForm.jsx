@@ -25,7 +25,7 @@ function PaymentFormContent({ invoiceId, totalAmount, onPaymentSuccess, onPaymen
   useEffect(() => {
     const fetchPaymentIntent = async () => {
       try {
-        const response = await fetch(buildApiUrl(`/invoices/${invoiceId}/create-payment-intent`), {
+        const response = await fetch(buildApiUrl(`/api/invoices/${invoiceId}/create-payment-intent`), {
           method: 'POST',
           headers: getAuthHeaders(),
         });
@@ -70,7 +70,7 @@ function PaymentFormContent({ invoiceId, totalAmount, onPaymentSuccess, onPaymen
         onPaymentError(result.error.message);
       } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
         // Confirm payment on backend
-        const confirmResponse = await fetch(buildApiUrl(`/invoices/${invoiceId}/confirm-payment`), {
+        const confirmResponse = await fetch(buildApiUrl(`/api/invoices/${invoiceId}/confirm-payment`), {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify({ paymentIntentId: result.paymentIntent.id }),

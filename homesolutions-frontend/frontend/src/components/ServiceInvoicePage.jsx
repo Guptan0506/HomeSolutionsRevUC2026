@@ -27,7 +27,7 @@ function ServiceInvoicePage({ invoiceRequest, onBackToProfile }) {
   // Check payment status
   useEffect(() => {
     if (invoiceRequest?.invoiceId) {
-      fetch(buildApiUrl(`/invoices/${invoiceRequest.invoiceId}/payment-status`), {
+      fetch(buildApiUrl(`/api/invoices/${invoiceRequest.invoiceId}/payment-status`), {
         headers: getAuthHeaders(),
       })
         .then((res) => res.json())
