@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaFacebook, FaInstagram, FaXTwitter, FaLinkedin } from "react-icons/fa6";
+import { FaFacebook, FaInstagram, FaXTwitter, FaLinkedin, FaBolt, FaDroplet, FaHammer, FaLeaf, FaPaintRoller, FaBroom, FaHouseChimney, FaShieldHalved, FaLock, FaBug, FaTree, FaToolbox } from "react-icons/fa6";
 import "./components/App.css"; // Correct path to your styles
 import heroImage from "./Assets/1.png";
 import logoImage from "./Assets/2.png";
@@ -54,49 +54,25 @@ const featuredProfessionals = [
 ];
 
 const serviceCatalog = [
-  { name: 'Electrical', description: 'Wiring fixes, installations, panel upgrades, and safety checks.' },
-  { name: 'Plumbing', description: 'Leak repair, drain cleaning, fixture replacement, and pipe work.' },
-  { name: 'HVAC', description: 'Heating, ventilation, AC tune-ups, and seasonal maintenance.' },
-  { name: 'Appliance Repair', description: 'Fast fixes for washers, dryers, ovens, and refrigerators.' },
-  { name: 'Carpentry', description: 'Custom woodwork, framing, shelving, and repair projects.' },
-  { name: 'Painting', description: 'Interior and exterior painting with smooth, lasting finishes.' },
-  { name: 'Landscaping', description: 'Lawn care, trimming, planting, and garden upkeep services.' },
-  { name: 'Cleaning', description: 'Deep cleaning, recurring upkeep, and move-in or move-out service.' },
-  { name: 'Roofing', description: 'Roof inspections, shingle repair, leak patching, and gutter work.' },
-  { name: 'Flooring', description: 'Tile, vinyl, laminate, hardwood, and repair installations.' },
-  { name: 'Handyman', description: 'General repairs, furniture assembly, mounting, and small projects.' },
-  { name: 'Pest Control', description: 'Inspection, treatment, and prevention for common household pests.' },
-  { name: 'Home Security', description: 'Alarm systems, smart locks, cameras, and access control.' },
-  { name: 'Drywall & Insulation', description: 'Wall repair, patching, insulation upgrades, and finishing.' },
-  { name: 'Window Cleaning', description: 'Interior and exterior window cleaning and light repairs.' },
-  { name: 'Tree Trimming', description: 'Pruning, removal, and seasonal yard safety maintenance.' },
-  { name: 'Pool & Spa', description: 'Routine maintenance, water balancing, and equipment care.' },
-  { name: 'Locksmith', description: 'Lock changes, rekeying, lockouts, and door hardware service.' }
+  { name: 'Electrical', description: 'Wiring fixes, installations, panel upgrades, and safety checks.', icon: FaBolt, tag: 'Emergency' },
+  { name: 'Plumbing', description: 'Leak repair, drain cleaning, fixture replacement, and pipe work.', icon: FaDroplet, tag: 'Emergency' },
+  { name: 'HVAC', description: 'Heating, ventilation, AC tune-ups, and seasonal maintenance.', icon: FaHouseChimney, tag: 'Seasonal' },
+  { name: 'Appliance Repair', description: 'Fast fixes for washers, dryers, ovens, and refrigerators.', icon: FaToolbox, tag: 'Popular' },
+  { name: 'Carpentry', description: 'Custom woodwork, framing, shelving, and repair projects.', icon: FaHammer, tag: 'Custom' },
+  { name: 'Painting', description: 'Interior and exterior painting with smooth, lasting finishes.', icon: FaPaintRoller, tag: 'Popular' },
+  { name: 'Landscaping', description: 'Lawn care, trimming, planting, and garden upkeep services.', icon: FaLeaf, tag: 'Seasonal' },
+  { name: 'Cleaning', description: 'Deep cleaning, recurring upkeep, and move-in or move-out service.', icon: FaBroom, tag: 'Recurring' },
+  { name: 'Roofing', description: 'Roof inspections, shingle repair, leak patching, and gutter work.', icon: FaHouseChimney, tag: 'Priority' },
+  { name: 'Flooring', description: 'Tile, vinyl, laminate, hardwood, and repair installations.', icon: FaHammer, tag: 'Upgrade' },
+  { name: 'Handyman', description: 'General repairs, furniture assembly, mounting, and small projects.', icon: FaWrench, tag: 'Popular' },
+  { name: 'Pest Control', description: 'Inspection, treatment, and prevention for common household pests.', icon: FaBug, tag: 'Urgent' },
+  { name: 'Home Security', description: 'Alarm systems, smart locks, cameras, and access control.', icon: FaShieldHalved, tag: 'Smart Home' },
+  { name: 'Drywall & Insulation', description: 'Wall repair, patching, insulation upgrades, and finishing.', icon: FaHammer, tag: 'Repair' },
+  { name: 'Window Cleaning', description: 'Interior and exterior window cleaning and light repairs.', icon: FaBroom, tag: 'Recurring' },
+  { name: 'Tree Trimming', description: 'Pruning, removal, and seasonal yard safety maintenance.', icon: FaTree, tag: 'Seasonal' },
+  { name: 'Pool & Spa', description: 'Routine maintenance, water balancing, and equipment care.', icon: FaDroplet, tag: 'Luxury' },
+  { name: 'Locksmith', description: 'Lock changes, rekeying, lockouts, and door hardware service.', icon: FaLock, tag: 'Emergency' }
 ];
-
-function getServiceBadgeLabel(name) {
-  const words = String(name || '')
-    .replace(/&/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (words.length === 0) {
-    return 'HS';
-  }
-
-  if (words.length === 1) {
-    return words[0].slice(0, 2).toUpperCase();
-  }
-
-  return words.slice(0, 2).map((word) => word[0]).join('').toUpperCase();
-}
-
-function getServiceBadgeStyle(index) {
-  const hue = (index * 29) % 360;
-  return {
-    background: `linear-gradient(135deg, hsl(${hue} 68% 46%), hsl(${(hue + 24) % 360} 68% 38%))`,
-  };
-}
 
 function getStoredUser() {
   const stored = localStorage.getItem('hs_user');
@@ -712,15 +688,18 @@ function App() {
               <section className="services-section" aria-label="Services" ref={servicesSectionRef}>
                 <div className="sec-label">Services</div>
                 <div className="services-grid">
-                  {serviceCatalog.map((service, index) => (
+                  {serviceCatalog.map((service) => {
+                    const ServiceIcon = service.icon || FaToolbox;
+
+                    return (
                     <article key={service.name} className="service-item card">
                       <div className="service-item-head">
-                        <div className="service-badge" style={getServiceBadgeStyle(index)}>
-                          {getServiceBadgeLabel(service.name)}
+                        <div className="service-badge">
+                          <ServiceIcon aria-hidden="true" />
                         </div>
                         <div>
                           <p className="service-name">{service.name}</p>
-                          <p className="service-chip">On-demand home support</p>
+                          <p className="service-chip">{service.tag || 'Home service'}</p>
                         </div>
                       </div>
                       <p className="service-copy">{service.description}</p>
@@ -732,7 +711,8 @@ function App() {
                         Select Provider
                       </button>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
 
