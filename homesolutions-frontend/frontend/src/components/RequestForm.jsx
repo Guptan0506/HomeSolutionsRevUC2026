@@ -1,5 +1,41 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { FaBolt, FaDroplet, FaHammer, FaLeaf, FaPaintRoller, FaBroom, FaHouseChimney, FaShieldHalved, FaLock, FaBug, FaTree, FaToolbox, FaWrench } from 'react-icons/fa6';
 import { buildApiUrl, getApiErrorMessage, getAuthHeaders, readJsonSafely } from '../api';
+
+const REQUEST_SERVICE_META = [
+  { match: ['electrical', 'electric'], icon: FaBolt, tag: 'Emergency' },
+  { match: ['plumbing'], icon: FaDroplet, tag: 'Emergency' },
+  { match: ['hvac', 'heating', 'cooling', 'ac'], icon: FaHouseChimney, tag: 'Seasonal' },
+  { match: ['appliance repair', 'appliance'], icon: FaToolbox, tag: 'Popular' },
+  { match: ['carpentry', 'carpenter', 'woodwork'], icon: FaHammer, tag: 'Custom' },
+  { match: ['painting', 'painter', 'paint'], icon: FaPaintRoller, tag: 'Popular' },
+  { match: ['landscaping', 'landscape', 'gardening', 'gardener'], icon: FaLeaf, tag: 'Seasonal' },
+  { match: ['cleaning', 'cleaner'], icon: FaBroom, tag: 'Recurring' },
+  { match: ['roofing', 'roofer'], icon: FaHouseChimney, tag: 'Priority' },
+  { match: ['flooring', 'floor installer'], icon: FaHammer, tag: 'Upgrade' },
+  { match: ['handyman', 'general repair', 'maintenance'], icon: FaWrench, tag: 'Popular' },
+  { match: ['pest control', 'pest', 'extermination'], icon: FaBug, tag: 'Urgent' },
+  { match: ['home security', 'security', 'alarm', 'smart lock', 'cameras'], icon: FaShieldHalved, tag: 'Smart Home' },
+  { match: ['drywall', 'insulation', 'sheetrock', 'patching'], icon: FaHammer, tag: 'Repair' },
+  { match: ['window cleaning', 'window washer', 'windows'], icon: FaBroom, tag: 'Recurring' },
+  { match: ['tree trimming', 'tree removal', 'arborist', 'tree care'], icon: FaTree, tag: 'Seasonal' },
+  { match: ['pool', 'spa', 'pool maintenance', 'pool service'], icon: FaDroplet, tag: 'Luxury' },
+  { match: ['locksmith', 'lock', 'rekey', 'key replacement'], icon: FaLock, tag: 'Emergency' },
+];
+
+function normalizeServiceText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getRequestServiceMeta(serviceLabel) {
+  const normalized = normalizeServiceText(serviceLabel);
+  const found = REQUEST_SERVICE_META.find((entry) => entry.match.some((term) => normalized.includes(normalizeServiceText(term))));
+
+  return found || { icon: FaToolbox, tag: 'Home Service' };
+}
 
 function RequestForm({ currentUser, selectedProvider, selectedService, onBack, onSuccess }) {
   const [requestTitle, setRequestTitle] = useState(selectedService || '');
@@ -20,6 +56,8 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const selectedServiceMeta = getRequestServiceMeta(requestTitle || selectedService || '');
+  const SelectedServiceIcon = selectedServiceMeta.icon || FaToolbox;
 
   useEffect(() => {
     if (selectedService && !requestTitle) {
@@ -239,6 +277,21 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
     <div className="section-wrap">
       <div className="sec-label">Request Service</div>
 
+      <div className="request-service-summary card" style={{ marginBottom: '18px' }}>
+        <div className="request-service-summary-head">
+          <div className="request-service-icon">
+            <SelectedServiceIcon aria-hidden="true" />
+          </div>
+          <div>
+            <p className="request-service-title">{requestTitle || selectedService || 'General Home Service'}</p>
+            <p className="request-service-chip">{selectedServiceMeta.tag || 'Home Service'}</p>
+          </div>
+        </div>
+        <p className="request-service-copy">
+          Pick one or more providers, add your details, and we’ll send the request to the best matches.
+        </p>
+      </div>
+
       <form onSubmit={handleSubmit} className="card form-card" style={{ padding: '20px' }}>
         <div style={{ marginBottom: '15px' }}>
           <label className="field-label">
@@ -285,6 +338,7 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
                       <p style={{ margin: 0, fontSize: '13px', color: 'var(--ink-500)' }}>
                         {specialization} • ${provider.hourly_charge || provider.hourly_rate}/hr
                       </p>
+                        <p className="request-provider-chip">{getRequestServiceMeta(specialization).tag || 'Home Service'}</p>
                     </div>
                   </label>
                 );
@@ -301,31 +355,13 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
                 {selectedProviders.map((provider) => (
                   <div
                     key={provider.sp_id || provider.id}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '6px 12px',
-                      backgroundColor: 'white',
-                      border: '1px solid var(--accent-ocean)',
-                      borderRadius: '16px',
-                      fontSize: '13px',
-                      color: 'var(--accent-ocean)',
-                    }}
+                    className="request-selected-provider-pill"
                   >
                     <span>{provider.sp_name || provider.full_name}</span>
                     <button
                       type="button"
                       onClick={() => toggleProviderSelection(provider.sp_id || provider.id)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--accent-ocean)',
-                        cursor: 'pointer',
-                        fontSize: '16px',
-                        padding: '0',
-                        lineHeight: '1',
-                      }}
+                      className="request-selected-provider-remove"
                     >
                       ✕
                     </button>
