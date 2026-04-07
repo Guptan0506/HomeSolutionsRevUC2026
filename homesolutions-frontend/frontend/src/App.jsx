@@ -74,6 +74,30 @@ const serviceCatalog = [
   { name: 'Locksmith', description: 'Lock changes, rekeying, lockouts, and door hardware service.' }
 ];
 
+function getServiceBadgeLabel(name) {
+  const words = String(name || '')
+    .replace(/&/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) {
+    return 'HS';
+  }
+
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+
+  return words.slice(0, 2).map((word) => word[0]).join('').toUpperCase();
+}
+
+function getServiceBadgeStyle(index) {
+  const hue = (index * 29) % 360;
+  return {
+    background: `linear-gradient(135deg, hsl(${hue} 68% 46%), hsl(${(hue + 24) % 360} 68% 38%))`,
+  };
+}
+
 function getStoredUser() {
   const stored = localStorage.getItem('hs_user');
 
@@ -688,9 +712,17 @@ function App() {
               <section className="services-section" aria-label="Services" ref={servicesSectionRef}>
                 <div className="sec-label">Services</div>
                 <div className="services-grid">
-                  {serviceCatalog.map((service) => (
+                  {serviceCatalog.map((service, index) => (
                     <article key={service.name} className="service-item card">
-                      <p className="service-name">{service.name}</p>
+                      <div className="service-item-head">
+                        <div className="service-badge" style={getServiceBadgeStyle(index)}>
+                          {getServiceBadgeLabel(service.name)}
+                        </div>
+                        <div>
+                          <p className="service-name">{service.name}</p>
+                          <p className="service-chip">On-demand home support</p>
+                        </div>
+                      </div>
                       <p className="service-copy">{service.description}</p>
                       <button
                         type="button"

@@ -22,6 +22,15 @@ const SERVICE_ALIASES = {
   roofing: ['roofing', 'roofer'],
   flooring: ['flooring', 'floor installer'],
   hvac: ['hvac', 'heating', 'cooling', 'ac'],
+  'appliance repair': ['appliance repair', 'appliance', 'washer', 'dryer', 'oven', 'refrigerator', 'fridge'],
+  handyman: ['handyman', 'handy man', 'general repair', 'maintenance'],
+  'pest control': ['pest control', 'pest', 'extermination', 'bug control'],
+  'home security': ['home security', 'security', 'alarm', 'smart lock', 'cameras'],
+  'drywall insulation': ['drywall', 'insulation', 'sheetrock', 'patching'],
+  'window cleaning': ['window cleaning', 'window washer', 'windows'],
+  'tree trimming': ['tree trimming', 'tree removal', 'arborist', 'tree care'],
+  'pool spa': ['pool', 'spa', 'pool maintenance', 'pool service'],
+  locksmith: ['locksmith', 'lock', 'rekey', 'key replacement'],
 };
 
 function normalizeServiceText(value) {

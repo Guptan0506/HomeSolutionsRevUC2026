@@ -469,11 +469,35 @@ body {
   margin-bottom: 0;
   border-top: 3px solid var(--accent-ocean);
   transition: box-shadow 200ms ease, transform 200ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .service-item:hover {
   box-shadow: 0 6px 20px rgba(44, 95, 138, 0.12);
   transform: translateY(-2px);
+}
+
+.service-item-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.service-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-size: 14px;
+  box-shadow: 0 10px 18px rgba(44, 95, 138, 0.18);
+  flex: 0 0 auto;
 }
 
 .service-name {
@@ -482,8 +506,23 @@ body {
   color: #1a2332;
 }
 
+.service-chip {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef5fb;
+  color: var(--accent-ocean);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .service-copy {
-  margin-top: 8px;
+  margin-top: 0;
   font-size: 15px;
   color: var(--ink-500);
   line-height: 1.55;
