@@ -2390,7 +2390,7 @@ app.post('/api/chat/troubleshoot', async (req, res) => {
 // ============================================================================
 
 // Middleware to verify admin access by role.
-const requireAdmin = (req, res, next) => {
+function requireAdmin(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ message: 'Authentication required' });
   }
@@ -2400,7 +2400,7 @@ const requireAdmin = (req, res, next) => {
   }
   
   next();
-};
+}
 
 // GET /api/admin/stats - Platform overview statistics
 app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
