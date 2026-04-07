@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { FaBolt, FaDroplet, FaHammer, FaLeaf, FaPaintRoller, FaBroom, FaHouseChimney, FaShieldHalved, FaLock, FaBug, FaTree, FaToolbox, FaWrench } from 'react-icons/fa6';
 import { sendTroubleshootMessage } from '../api';
 
 const starterPrompts = [
@@ -6,6 +7,41 @@ const starterPrompts = [
   'My circuit breaker keeps tripping.',
   'My AC is not cooling properly.',
 ];
+
+const SERVICE_META = [
+  { match: ['electrical', 'electric'], icon: FaBolt, tag: 'Emergency' },
+  { match: ['plumbing'], icon: FaDroplet, tag: 'Emergency' },
+  { match: ['hvac', 'heating', 'cooling', 'ac'], icon: FaHouseChimney, tag: 'Seasonal' },
+  { match: ['appliance repair', 'appliance'], icon: FaToolbox, tag: 'Popular' },
+  { match: ['carpentry', 'carpenter', 'woodwork'], icon: FaHammer, tag: 'Custom' },
+  { match: ['painting', 'painter', 'paint'], icon: FaPaintRoller, tag: 'Popular' },
+  { match: ['landscaping', 'landscape', 'gardening', 'gardener'], icon: FaLeaf, tag: 'Seasonal' },
+  { match: ['cleaning', 'cleaner'], icon: FaBroom, tag: 'Recurring' },
+  { match: ['roofing', 'roofer'], icon: FaHouseChimney, tag: 'Priority' },
+  { match: ['flooring', 'floor installer'], icon: FaHammer, tag: 'Upgrade' },
+  { match: ['handyman', 'general repair', 'maintenance'], icon: FaWrench, tag: 'Popular' },
+  { match: ['pest control', 'pest', 'extermination'], icon: FaBug, tag: 'Urgent' },
+  { match: ['home security', 'security', 'alarm', 'smart lock', 'cameras'], icon: FaShieldHalved, tag: 'Smart Home' },
+  { match: ['drywall', 'insulation', 'sheetrock', 'patching'], icon: FaHammer, tag: 'Repair' },
+  { match: ['window cleaning', 'window washer', 'windows'], icon: FaBroom, tag: 'Recurring' },
+  { match: ['tree trimming', 'tree removal', 'arborist', 'tree care'], icon: FaTree, tag: 'Seasonal' },
+  { match: ['pool', 'spa', 'pool maintenance', 'pool service'], icon: FaDroplet, tag: 'Luxury' },
+  { match: ['locksmith', 'lock', 'rekey', 'key replacement'], icon: FaLock, tag: 'Emergency' },
+];
+
+function normalizeServiceText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getServiceMeta(serviceLabel) {
+  const normalized = normalizeServiceText(serviceLabel);
+  const found = SERVICE_META.find((entry) => entry.match.some((term) => normalized.includes(normalizeServiceText(term))));
+
+  return found || { icon: FaToolbox, tag: 'Home Service' };
+}
 
 function TroubleshootChatbot({ onNavigateToRequest }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -136,6 +172,23 @@ function TroubleshootChatbot({ onNavigateToRequest }) {
                 </article>
                 {message.role === 'assistant' && message.recommendedServiceType && (
                   <div className="chatbot-request-section">
+                    {(() => {
+                      const meta = getServiceMeta(message.recommendedServiceType);
+                      const RecommendedIcon = meta.icon || FaToolbox;
+
+                      return (
+                        <div className="chatbot-request-head">
+                          <div className="chatbot-request-icon">
+                            <RecommendedIcon aria-hidden="true" />
+                          </div>
+                          <div>
+                            <p className="chatbot-request-label">Recommended service</p>
+                            <p className="chatbot-request-service">{message.recommendedServiceType}</p>
+                            <p className="chatbot-request-chip">{meta.tag || 'Home Service'}</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <p className="chatbot-request-text">
                       This issue needs professional attention. Would you like to submit a service request?
                     </p>
@@ -144,7 +197,7 @@ function TroubleshootChatbot({ onNavigateToRequest }) {
                       className="btn-p chatbot-request-btn"
                       onClick={() => handleSubmitRequest(message.recommendedServiceType)}
                     >
-                      Submit Request for {message.recommendedServiceType} Service
+                      Book {message.recommendedServiceType}
                     </button>
                   </div>
                 )}
