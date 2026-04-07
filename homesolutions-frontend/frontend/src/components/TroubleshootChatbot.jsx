@@ -190,14 +190,14 @@ function TroubleshootChatbot({ onNavigateToRequest }) {
                       );
                     })()}
                     <p className="chatbot-request-text">
-                      This issue needs professional attention. Would you like to submit a service request?
+                      This likely needs a professional. Want to send a request?
                     </p>
                     <button
                       type="button"
                       className="btn-p chatbot-request-btn"
                       onClick={() => handleSubmitRequest(message.recommendedServiceType)}
                     >
-                      Book {message.recommendedServiceType}
+                      Request {message.recommendedServiceType}
                     </button>
                   </div>
                 )}

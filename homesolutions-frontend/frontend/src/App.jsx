@@ -703,7 +703,7 @@ function App() {
                         </div>
                         <div>
                           <p className="service-name">{service.name}</p>
-                          <p className="service-chip">{service.tag || 'Home service'}</p>
+                          <p className="service-chip">{service.tag || 'Core Service'}</p>
                         </div>
                       </div>
                       <p className="service-copy">{service.description}</p>
@@ -712,7 +712,7 @@ function App() {
                         className="btn-s service-select-btn"
                         onClick={() => goToProviderSelection(service.name)}
                       >
-                        Select Provider
+                        View Providers
                       </button>
                     </article>
                     );

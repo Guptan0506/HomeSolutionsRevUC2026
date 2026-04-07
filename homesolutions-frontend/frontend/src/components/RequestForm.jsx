@@ -288,7 +288,7 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
           </div>
         </div>
         <p className="request-service-copy">
-          Pick one or more providers, add your details, and we’ll send the request to the best matches.
+          Choose up to 3 professionals, add the details, and send one request to the best matches.
         </p>
       </div>
 
@@ -298,7 +298,7 @@ function RequestForm({ currentUser, selectedProvider, selectedService, onBack, o
             Select providers (up to 3)
           </label>
           <p className="card-sub" style={{ marginBottom: '12px', color: 'var(--ink-700)' }}>
-            Choose 1-3 professionals. If one accepts, requests to others will be automatically canceled.
+            Choose up to 3 professionals. If one accepts, we’ll cancel the rest automatically.
           </p>
           
           {providerLoadError && <p className="auth-error" style={{ marginBottom: '12px' }}>{providerLoadError}</p>}

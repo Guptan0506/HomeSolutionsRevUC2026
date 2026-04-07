@@ -90,7 +90,7 @@ function getProviderServiceMeta(serviceLabel) {
   const normalized = normalizeServiceText(serviceLabel);
   const found = PROVIDER_SERVICE_META.find((entry) => entry.match.some((term) => normalized.includes(normalizeServiceText(term))));
 
-  return found || { icon: FaToolbox, tag: 'Home Service' };
+  return found || { icon: FaToolbox, tag: 'Core Service' };
 }
 
 function ServiceProviderSelectionPage({ selectedService, customerLocation, onBookNow }) {
@@ -309,7 +309,7 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
                     <div>
                       <p className="provider-selection-name">{providerName}</p>
                       <p className="provider-selection-service">{providerService}</p>
-                      <p className="provider-selection-chip">{providerMeta.tag || 'Home Service'}</p>
+                      <p className="provider-selection-chip">{providerMeta.tag || 'Core Service'}</p>
                     </div>
                   </div>
                   <p className="provider-selection-rate">{formatHourlyRate(provider)}</p>
@@ -329,7 +329,7 @@ function ServiceProviderSelectionPage({ selectedService, customerLocation, onBoo
                   className="btn-p book-now-btn"
                   onClick={() => onBookNow({ ...provider, selected_service_name: selectedService || providerService })}
                 >
-                  Book Now
+                  Continue
                 </button>
               </article>
             );
