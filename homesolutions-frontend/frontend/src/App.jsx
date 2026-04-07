@@ -54,10 +54,24 @@ const featuredProfessionals = [
 ];
 
 const serviceCatalog = [
-  { name: 'Electric', description: 'Wiring fixes, installations, and safety checks.' },
-  { name: 'Plumbing', description: 'Leak repair, drain cleaning, and fixture replacement.' },
-  { name: 'Painting', description: 'Interior and exterior painting with smooth finishes.' },
-  { name: 'Landscaping', description: 'Lawn care, trimming, and garden upkeep services.' }
+  { name: 'Electrical', description: 'Wiring fixes, installations, panel upgrades, and safety checks.' },
+  { name: 'Plumbing', description: 'Leak repair, drain cleaning, fixture replacement, and pipe work.' },
+  { name: 'HVAC', description: 'Heating, ventilation, AC tune-ups, and seasonal maintenance.' },
+  { name: 'Appliance Repair', description: 'Fast fixes for washers, dryers, ovens, and refrigerators.' },
+  { name: 'Carpentry', description: 'Custom woodwork, framing, shelving, and repair projects.' },
+  { name: 'Painting', description: 'Interior and exterior painting with smooth, lasting finishes.' },
+  { name: 'Landscaping', description: 'Lawn care, trimming, planting, and garden upkeep services.' },
+  { name: 'Cleaning', description: 'Deep cleaning, recurring upkeep, and move-in or move-out service.' },
+  { name: 'Roofing', description: 'Roof inspections, shingle repair, leak patching, and gutter work.' },
+  { name: 'Flooring', description: 'Tile, vinyl, laminate, hardwood, and repair installations.' },
+  { name: 'Handyman', description: 'General repairs, furniture assembly, mounting, and small projects.' },
+  { name: 'Pest Control', description: 'Inspection, treatment, and prevention for common household pests.' },
+  { name: 'Home Security', description: 'Alarm systems, smart locks, cameras, and access control.' },
+  { name: 'Drywall & Insulation', description: 'Wall repair, patching, insulation upgrades, and finishing.' },
+  { name: 'Window Cleaning', description: 'Interior and exterior window cleaning and light repairs.' },
+  { name: 'Tree Trimming', description: 'Pruning, removal, and seasonal yard safety maintenance.' },
+  { name: 'Pool & Spa', description: 'Routine maintenance, water balancing, and equipment care.' },
+  { name: 'Locksmith', description: 'Lock changes, rekeying, lockouts, and door hardware service.' }
 ];
 
 function getStoredUser() {
@@ -602,7 +616,7 @@ function App() {
                     <p className="hero-eyebrow">Fast booking. Trusted experts.</p>
                     <h1>Your home deserves five-star care.</h1>
                     <p className="hero-sub">
-                      Discover local professionals for plumbing, electrical, and maintenance work in just a few taps.
+                      Discover local professionals for electrical, plumbing, HVAC, cleaning, and specialty home work in just a few taps.
                     </p>
                   </div>
 

@@ -29,7 +29,9 @@ const locations = [
 
 const providerSpecializations = [
   'Plumbing', 'Electrical', 'HVAC', 'Appliance Repair', 'Carpentry',
-  'Painting', 'Landscaping', 'Cleaning', 'Roofing', 'Flooring'
+  'Painting', 'Landscaping', 'Cleaning', 'Roofing', 'Flooring',
+  'Handyman', 'Pest Control', 'Home Security', 'Drywall & Insulation',
+  'Window Cleaning', 'Tree Trimming', 'Pool & Spa', 'Locksmith'
 ];
 
 function pick(arr, index) {
